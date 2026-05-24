@@ -263,12 +263,12 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
 
             bool isLiveDominant = (type == "7" || type == "9" || type == "11" || type == "13" || type == "7b5");
             bool isLiveFlat7 = isLiveDominant || (isLiveMinor && type != "mM7");
-            if (rule.sourceChordType == 0x02 && isLiveFlat7) {
+            if (isLiveFlat7) {
                 if (styleInterval == 11) {
                     mappedInterval = 10;
                 }
             }
-            else if ((rule.sourceChordType == 0x13 || rule.sourceChordType == 0x0A) && (type == "M7" || type == "M9" || type == "mM7")) {
+            else if (type == "M7" || type == "M9" || type == "mM7") {
                 if (styleInterval == 10) {
                     mappedInterval = 11;
                 }

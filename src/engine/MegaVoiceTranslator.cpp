@@ -90,7 +90,7 @@ bool MegaVoiceTranslator::translate(const std::string& trackName, int& note, int
         }
         
         note = fxNote;
-        velocity = 100; // Standard keyswitch velocity
+        velocity = 30; // Very soft velocity to make scratches and hits subtle and realistic
         outArticulation = "Ample " + articulation;
         return true;
     }

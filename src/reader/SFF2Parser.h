@@ -47,6 +47,7 @@ private:
     std::string m_currentSections;
     uint8_t m_sourceRoot;
     uint8_t m_sourceChordType;
+    uint16_t m_ppqn = 480; // Native PPQN from MThd
     std::vector<CasmRule> m_casmRules;
     std::vector<MidiEvent> m_midiEvents; // Stores the entire sequence of notes and section markers
 

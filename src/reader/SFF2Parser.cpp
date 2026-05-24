@@ -89,6 +89,7 @@ void SFF2Parser::parseMThd(const char* data, uint32_t length) {
     uint16_t tracks = (static_cast<uint8_t>(data[2]) << 8) | static_cast<uint8_t>(data[3]);
     uint16_t division = (static_cast<uint8_t>(data[4]) << 8) | static_cast<uint8_t>(data[5]);
     
+    m_ppqn = division; // Store native PPQN
     std::cout << "  -> MIDI Header: Format " << format << ", Tracks: " << tracks << ", PPQN: " << division << std::endl;
 }
 
@@ -101,6 +102,8 @@ void SFF2Parser::parseMTrk(const char* data, uint32_t length) {
 
     int noteCount = 0;
     int markerCount = 0;
+
+    double scaleFactor = 1920.0 / m_ppqn;
 
     while (ptr < end) {
         uint32_t delta = readVariableLength(ptr, end);
@@ -117,7 +120,7 @@ void SFF2Parser::parseMTrk(const char* data, uint32_t length) {
         }
 
         MidiEvent ev;
-        ev.absoluteTick = absoluteTick;
+        ev.absoluteTick = static_cast<uint32_t>(absoluteTick * scaleFactor);
         ev.status = status;
         ev.data1 = 0;
         ev.data2 = 0;
@@ -132,7 +135,7 @@ void SFF2Parser::parseMTrk(const char* data, uint32_t length) {
             
             if (ev.data1 == 0x06 || ev.data1 == 0x01) { // Marker or Text
                 ev.metaText = std::string(ptr, len);
-                std::cout << "     [MARKER] Section: " << ev.metaText << " (Tick " << absoluteTick << ")" << std::endl;
+                std::cout << "     [MARKER] Section: " << ev.metaText << " (Native Tick " << absoluteTick << " -> Scaled Tick " << ev.absoluteTick << ")" << std::endl;
                 markerCount++;
             }
             ptr += len;

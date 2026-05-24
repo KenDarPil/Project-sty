@@ -48,6 +48,22 @@ void Sequencer::setSection(const std::string& sectionName) {
         }
     }
     
+    if (!foundStart) {
+        std::cout << "[Sequencer] WARNING: Section [" << sectionName << "] not found in style! Searching for fallback..." << std::endl;
+        for (const auto& ev : events) {
+            if (ev.status == 0xFF && (ev.data1 == 0x06 || ev.data1 == 0x01)) {
+                if (!ev.metaText.empty() && ev.metaText.find("fn:") == std::string::npos) {
+                    std::cout << "[Sequencer] Auto-selected fallback section: [" << ev.metaText << "]" << std::endl;
+                    m_currentSection = ev.metaText;
+                    setSection(ev.metaText); // Recurse with fallback
+                    return;
+                }
+            }
+        }
+        std::cerr << "[Sequencer] ERROR: No valid section markers found in style file!" << std::endl;
+        return;
+    }
+    
     if (foundStart && m_sectionEndTick == 0) {
         if (!events.empty()) m_sectionEndTick = events.back().absoluteTick;
     }
@@ -176,47 +192,73 @@ void Sequencer::tick(uint32_t currentTick) {
                         uint8_t rtr = matchedRule.retriggerRule;
                         int velocity = m_playingVelocities[ch][n];
                         
-                        m_midiOut.sendNoteOff(ch, oldTransposed);
-                        m_playingNotes[ch][n] = -1;
+                        bool isGuitar = (matchedRule.trackName.find("Gtr") != std::string::npos || 
+                                         matchedRule.trackName.find("gtr") != std::string::npos ||
+                                         matchedRule.trackName.find("Guitar") != std::string::npos ||
+                                         matchedRule.trackName.find("guitar") != std::string::npos ||
+                                         matchedRule.ntt == 4);
+                                         
+                        bool isBass = (matchedRule.trackName.find("Bass") != std::string::npos || 
+                                       matchedRule.trackName.find("bass") != std::string::npos ||
+                                       matchedRule.ntt == 3);
                         
                         if (rtr == 0) {
-                            // STOP: Keep note silent
-                        } else {
-                            // RETRIGGER or PITCH SHIFT (re-sound at transposed pitch)
+                            // STOP: Kill the old note
+                            m_midiOut.sendNoteOff(ch, oldTransposed);
+                            m_playingNotes[ch][n] = -1;
+                            m_playingVelocities[ch][n] = 0;
+                        } 
+                        else if (rtr == 1) {
+                            // PITCH SHIFT / LEGATO: Overlap new Note On before old Note Off for smooth VST legato transitions
                             int newTransposed = m_transpositionBrain.calculateTransposition(n, currentChord, matchedRule);
                             
-                            bool isGuitar = (matchedRule.trackName.find("Gtr") != std::string::npos || 
-                                             matchedRule.trackName.find("gtr") != std::string::npos ||
-                                             matchedRule.trackName.find("Guitar") != std::string::npos ||
-                                             matchedRule.trackName.find("guitar") != std::string::npos ||
-                                             matchedRule.ntt == 4);
-                                             
-                            bool isBass = (matchedRule.trackName.find("Bass") != std::string::npos || 
-                                           matchedRule.trackName.find("bass") != std::string::npos ||
-                                           matchedRule.ntt == 3);
-                                           
                             // Fold notes to stay inside VST physical playable range
                             if (isGuitar) {
-                                while (newTransposed < 40) {
-                                    newTransposed += 12;
-                                }
-                                while (newTransposed > 84) {
-                                    newTransposed -= 12;
-                                }
+                                while (newTransposed < 40) newTransposed += 12;
+                                while (newTransposed > 84) newTransposed -= 12;
                             }
                             else if (isBass) {
-                                while (newTransposed < 28) {
-                                    newTransposed += 12;
-                                }
-                                while (newTransposed > 67) {
-                                    newTransposed -= 12;
-                                }
+                                while (newTransposed < 28) newTransposed += 12;
+                                while (newTransposed > 67) newTransposed -= 12;
                             }
                                                    
-                            if (isGuitar && newTransposed < 40) {
+                            if ((isGuitar && newTransposed < 40) || (isBass && newTransposed < 28)) {
+                                m_midiOut.sendNoteOff(ch, oldTransposed);
+                                m_playingNotes[ch][n] = -1;
+                                m_playingVelocities[ch][n] = 0;
                                 continue;
                             }
-                            if (isBass && newTransposed < 28) {
+                            
+                            // Translate Megavoice articulations if any
+                            if (!matchedRule.trackName.empty()) {
+                                std::string articulation;
+                                m_megaVoiceTranslator.translate(matchedRule.trackName, newTransposed, velocity, articulation);
+                            }
+                            
+                            // Trigger overlapping legato note On first
+                            m_midiOut.sendNoteOn(ch, newTransposed, velocity);
+                            // Turn off the old note immediately after to trigger smooth legato glide/hammer-on
+                            m_midiOut.sendNoteOff(ch, oldTransposed);
+                            
+                            m_playingNotes[ch][n] = newTransposed;
+                        }
+                        else {
+                            // RETRIGGER (RTR 3): Direct restrike with hard note-off and note-on
+                            int newTransposed = m_transpositionBrain.calculateTransposition(n, currentChord, matchedRule);
+                            
+                            if (isGuitar) {
+                                while (newTransposed < 40) newTransposed += 12;
+                                while (newTransposed > 84) newTransposed -= 12;
+                            }
+                            else if (isBass) {
+                                while (newTransposed < 28) newTransposed += 12;
+                                while (newTransposed > 67) newTransposed -= 12;
+                            }
+                                                   
+                            if ((isGuitar && newTransposed < 40) || (isBass && newTransposed < 28)) {
+                                m_midiOut.sendNoteOff(ch, oldTransposed);
+                                m_playingNotes[ch][n] = -1;
+                                m_playingVelocities[ch][n] = 0;
                                 continue;
                             }
                             
@@ -225,8 +267,10 @@ void Sequencer::tick(uint32_t currentTick) {
                                 m_megaVoiceTranslator.translate(matchedRule.trackName, newTransposed, velocity, articulation);
                             }
                             
-                            m_playingNotes[ch][n] = newTransposed;
+                            m_midiOut.sendNoteOff(ch, oldTransposed);
                             m_midiOut.sendNoteOn(ch, newTransposed, velocity);
+                            
+                            m_playingNotes[ch][n] = newTransposed;
                         }
                     }
                 }
