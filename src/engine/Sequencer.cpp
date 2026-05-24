@@ -102,31 +102,36 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
                 entry.newTransposed = oldTransposed;
                 entry.shouldErase   = true;
             } else {
-                // RTR=1 (legato) or RTR>1 (retrigger): pitch-shift
-                int newTransposed = m_transpositionBrain.calculateTransposition(originalNote, m_activeChord, matchedRule);
-
-                if (isGuitar) {
-                    while (newTransposed < 40) newTransposed += 12;
-                    while (newTransposed > 84) newTransposed -= 12;
-                } else if (isBass) {
-                    while (newTransposed < 28) newTransposed += 12;
-                    while (newTransposed > 67) newTransposed -= 12;
-                }
-
-                if ((isGuitar && newTransposed < 40) || (isBass && newTransposed < 28)) {
+                // FIX: Check original note for keyswitches BEFORE recalculating
+                if ((isGuitar && originalNote < 40) || (isBass && originalNote < 28)) {
                     entry.shouldErase   = true;
                     entry.newTransposed = oldTransposed;
                 } else {
-                    // Global velocity soft-limit: keep within 80-100 to prevent clipping
-                    if (velocity > 100) velocity = 100;
-                    if (velocity < 1)   velocity = 1;
-                    entry.velocity     = velocity;
-                    entry.newTransposed = newTransposed;
-                }
+                    int newTransposed = m_transpositionBrain.calculateTransposition(originalNote, m_activeChord, matchedRule);
 
-                if (!matchedRule.trackName.empty()) {
-                    std::string articulation;
-                    m_megaVoiceTranslator.translate(matchedRule.trackName, entry.newTransposed, velocity, articulation);
+                    if (isGuitar) {
+                        while (newTransposed < 40) newTransposed += 12;
+                        while (newTransposed > 84) newTransposed -= 12;
+                    } else if (isBass) {
+                        while (newTransposed < 28) newTransposed += 12;
+                        while (newTransposed > 67) newTransposed -= 12;
+                    }
+
+                    if ((isGuitar && newTransposed < 40) || (isBass && newTransposed < 28)) {
+                        entry.shouldErase   = true;
+                        entry.newTransposed = oldTransposed;
+                    } else {
+                        // Global velocity soft-limit: keep within 80-100 to prevent clipping
+                        if (velocity > 100) velocity = 100;
+                        if (velocity < 1)   velocity = 1;
+                        entry.velocity     = velocity;
+                        entry.newTransposed = newTransposed;
+                    }
+
+                    if (!matchedRule.trackName.empty()) {
+                        std::string articulation;
+                        m_megaVoiceTranslator.translate(matchedRule.trackName, entry.newTransposed, velocity, articulation);
+                    }
                 }
             }
             entries.push_back(entry);
@@ -481,6 +486,12 @@ void Sequencer::tick(uint32_t currentTick) {
                 velocity = 100;
             }
 
+            // FIX: Intercept and discard keyswitches BEFORE transposing or folding!
+            if ((isGuitar && originalNote < 40) || (isBass && originalNote < 28)) {
+                m_eventIndex++;
+                continue;
+            }
+
             int transformedNote = originalNote;
             if (!isDrumTrack) {
                 transformedNote = m_transpositionBrain.calculateTransposition(originalNote, activeChordCopy, channelRule);
@@ -499,16 +510,6 @@ void Sequencer::tick(uint32_t currentTick) {
             else if (isBass) {
                 while (transformedNote < 28) transformedNote += 12;
                 while (transformedNote > 67) transformedNote -= 12;
-            }
-            
-            // Intercept and discard keyswitches
-            if (isGuitar && transformedNote < 40) {
-                m_eventIndex++;
-                continue;
-            }
-            if (isBass && transformedNote < 28) {
-                m_eventIndex++;
-                continue;
             }
 
             if (!channelRule.trackName.empty()) {
