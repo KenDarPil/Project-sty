@@ -53,6 +53,12 @@ int main(int argc, char* argv[]) {
     engine::Sequencer sequencer(parser, midiOut, liveListener.getChordRecognizer());
     
     engine::StyleController styleController;
+    styleController.setSequencer(&sequencer);
+    
+    liveListener.setChordCallback([&styleController](const engine::Chord& newChord) {
+        styleController.onInputChordDetected(newChord);
+    });
+    
     engine::RegistrationBank registrationBank;
     
     // Pre-populate some registration memory slots for demo/testing

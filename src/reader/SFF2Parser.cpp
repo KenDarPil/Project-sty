@@ -320,4 +320,28 @@ void SFF2Parser::parseCtab(const char* data, uint32_t length) {
               << " | NTR: " << (int)rule.ntr << " | NTT: " << (int)rule.ntt << std::endl;
 }
 
+CasmRule SFF2Parser::getCasmRuleForChannel(const std::string& section, uint8_t channel) const {
+    for (const auto& rule : m_casmRules) {
+        if (rule.sourceChannel == channel && rule.appliedSections.find(section) != std::string::npos) {
+            if (rule.trackName.find("CC") != std::string::npos) continue;
+            return rule;
+        }
+    }
+    // Return a default rule if not found
+    CasmRule defaultRule;
+    defaultRule.sourceChannel = channel;
+    defaultRule.destChannel = channel;
+    defaultRule.playNote = 1;
+    defaultRule.playChord = 1;
+    defaultRule.highKey = 0xFF;
+    defaultRule.noteLimitLow = 0xFF;
+    defaultRule.noteLimitHigh = 0xFF;
+    defaultRule.retriggerRule = 0;
+    defaultRule.ntr = 0;
+    defaultRule.ntt = 0;
+    defaultRule.sourceRoot = 0;
+    defaultRule.sourceChordType = 2;
+    return defaultRule;
+}
+
 } // namespace engine
