@@ -7,30 +7,8 @@
 namespace engine {
 
 MegaVoiceTranslator::MegaVoiceTranslator() {
-    // Standard MegaVoice Guitar rules (e.g. steel guitar, nylon guitar, clean guitar)
-    // MegaVoice high velocities (>= 120) typically trigger slides, slaps, open/mute, or strum sounds
-    ArticulationRule slideUp = {120, 24, 100, true, "Fret Slide Up"};
-    ArticulationRule fretNoise = {115, 25, 90, true, "Fret Noise"};
-    ArticulationRule harmonic = {110, 26, 95, true, "Harmonics"};
-    ArticulationRule choke = {105, 27, 85, true, "Choke"};
-    
-    // We register rules for common track names in lowercase
-    std::vector<std::string> gtrTracks = {"guitar", "guitar1", "guitar2", "gtr", "gtr1", "gtr2", "lguitar", "rguitar"};
-    for (const auto& track : gtrTracks) {
-        addRule(track, slideUp);
-        addRule(track, fretNoise);
-        addRule(track, harmonic);
-        addRule(track, choke);
-    }
-    
-    // Bass rules (Acoustic, Fingered, Picked)
-    ArticulationRule bassSlide = {120, 12, 100, false, "Bass Slide"};
-    ArticulationRule bassSlap = {110, 13, 90, false, "Bass Slap"};
-    std::vector<std::string> bassTracks = {"bass", "bass1", "bass2", "bs", "bs1", "bs2", "abass", "fbass", "pbass"};
-    for (const auto& track : bassTracks) {
-        addRule(track, bassSlide);
-        addRule(track, bassSlap);
-    }
+    // We now hardcode Ample Sound specific logic directly in translate() instead of using m_rules
+    // to ensure complete coverage of Yamaha's MegaVoice noises.
 }
 
 MegaVoiceTranslator::~MegaVoiceTranslator() {}
@@ -41,7 +19,7 @@ void MegaVoiceTranslator::addRule(const std::string& trackName, ArticulationRule
     m_rules[lowerTrack].push_back(rule);
 }
 
-bool MegaVoiceTranslator::translate(const std::string& trackName, int& note, int& velocity, std::string& outArticulation) {
+bool MegaVoiceTranslator::translate(const std::string& trackName, int& note, int& velocity, int& outKeyswitch, std::string& outArticulation) {
     std::string lowerTrack = trackName;
     for (auto& c : lowerTrack) c = std::tolower(c);
     
@@ -52,74 +30,78 @@ bool MegaVoiceTranslator::translate(const std::string& trackName, int& note, int
                    lowerTrack.find("bs") != std::string::npos || 
                    lowerTrack.find("ba") != std::string::npos);
 
-    // High-Velocity FX Translator (Ample Sound Translation for Guitar tracks)
-    if (isGuitar && velocity >= 115) {
-        int fxNote = 77;
-        std::string articulation = "Scratch";
-        
-        // Check track context (keywords in trackName)
-        if (lowerTrack.find("mute") != std::string::npos || lowerTrack.find("choke") != std::string::npos) {
-            // Mute context: Muting Noise, Hit Top (Mute), Scratch
+    outKeyswitch = -1; // Default: no keyswitch
+
+    // If it's a structural mute (-1), leave it alone.
+    if (note == -1) return false;
+
+    // --- GUITAR MEGA VOICE TO AMPLE GUITAR ---
+    if (isGuitar) {
+        // Handle Yamaha's extreme noise triggers (outside playable guitar range)
+        if (note < 40 || note > 84) {
             int r = std::rand() % 3;
-            if (r == 0) {
-                fxNote = 79; // Muting Noise (G5)
-                articulation = "Muting Noise";
-            } else if (r == 1) {
-                fxNote = 90; // Hit Top (Mute) (F#6)
-                articulation = "Hit Top (Mute)";
-            } else {
-                fxNote = 77; // Scratch (F5)
-                articulation = "Scratch";
-            }
-        } else {
-            // Open/Standard context: Scratch, Muting Noise, Hit Top (Open), Hit Top (Mute)
-            int r = std::rand() % 4;
-            if (r == 0) {
-                fxNote = 77; // Scratch (F5)
-                articulation = "Scratch";
-            } else if (r == 1) {
-                fxNote = 79; // Muting Noise (G5)
-                articulation = "Muting Noise";
-            } else if (r == 2) {
-                fxNote = 89; // Hit Top (Open) (F6)
-                articulation = "Hit Top (Open)";
-            } else {
-                fxNote = 90; // Hit Top (Mute) (F#6)
-                articulation = "Hit Top (Mute)";
-            }
+            note = (r == 0) ? 77 : (r == 1 ? 79 : 90); // Scratch, Muting Noise, Hit Top
+            velocity = 40;
+            outArticulation = "Ample Noise/Scratch";
+            return true;
         }
-        
-        note = fxNote;
-        velocity = 30; // Very soft velocity to make scratches and hits subtle and realistic
-        outArticulation = "Ample " + articulation;
-        return true;
-    }
 
-    // Velocity Clamping for all normal notes (velocity < 115) on Guitar/Bass tracks
-    if ((isGuitar || isBass) && velocity < 115) {
-        if (velocity > 100) {
+        // It is a normal playable note.
+        // Yamaha uses velocity on normal notes to trigger articulations like Palm Mute or Slides.
+        if (velocity <= 60) {
+            outKeyswitch = 24; // C0 (Sustain)
+            outArticulation = "Ample Sustain";
+            return true;
+        } else if (velocity <= 90) {
+            outKeyswitch = 26; // D0 (Palm Mute)
+            // Boost velocity back up so the mute is heard clearly
+            velocity = 90;
+            outArticulation = "Ample Palm Mute";
+            return true;
+        } else if (velocity <= 110) {
+            outKeyswitch = 27; // D#0 (Slide/Scratch depending on context, or hard sustain)
             velocity = 100;
+            outArticulation = "Ample Hard Strum";
+            return true;
+        } else {
+            // Very high velocity (> 110)
+            outKeyswitch = 28; // E0 or similar articulation (Slide)
+            velocity = 110;
+            outArticulation = "Ample Slide/Strum";
+            return true;
         }
     }
 
-    // Fallback to Yamaha proprietary MegaVoice translations
-    auto it = m_rules.find(lowerTrack);
-    if (it == m_rules.end()) {
-        return false; // No MegaVoice rules exist for this track
-    }
+    // --- BASS MEGA VOICE TO AMPLE BASS ---
+    if (isBass) {
+        // Handle extreme noise/trigger notes (outside playable bass range)
+        if (note < 28 || note > 60) {
+            note = 28; // Pop/Slap Keyswitch directly (as a noise)
+            velocity = 100;
+            outArticulation = "Ample Slap Noise";
+            return true;
+        }
 
-    // Check the rules. (Assume rules are sorted by highest velocity first)
-    for (const auto& rule : it->second) {
-        if (velocity >= rule.velocityThreshold) {
-            outArticulation = rule.articulationName;
-            
-            if (rule.muteOriginalNote) {
-                // Completely swap the high-pitched Yamaha note for the VST Keyswitch
-                note = rule.keyswitchNote;
-                velocity = rule.keyswitchVelocity;
-            }
-            
-            return true; // We successfully translated the MegaVoice!
+        // Normal playable note. Map velocities to articulations.
+        if (velocity <= 60) {
+            outKeyswitch = 24; // C0 (Sustain)
+            outArticulation = "Ample Sustain";
+            return true;
+        } else if (velocity <= 90) {
+            outKeyswitch = 26; // D0 (Palm Mute)
+            velocity = 95; // Boost velocity for audibility
+            outArticulation = "Ample Palm Mute";
+            return true;
+        } else if (velocity <= 110) {
+            outKeyswitch = 27; // D#0 (Slide)
+            velocity = 105;
+            outArticulation = "Ample Slide";
+            return true;
+        } else {
+            outKeyswitch = 28; // E0 (Slap)
+            velocity = 115;
+            outArticulation = "Ample Slap";
+            return true;
         }
     }
 

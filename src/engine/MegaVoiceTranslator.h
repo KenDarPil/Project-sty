@@ -24,9 +24,11 @@ public:
     void addRule(const std::string& trackName, ArticulationRule rule);
 
     // Processes an outgoing MIDI note. 
-    // If it hits a MegaVoice threshold, it modifies the note/velocity references into a VST keyswitch.
-    // Returns true if an articulation was triggered.
-    bool translate(const std::string& trackName, int& note, int& velocity, std::string& outArticulation);
+    // If it hits a MegaVoice threshold, it modifies the note/velocity references.
+    // If a keyswitch needs to be played *before* the note (like a mute), it returns the keyswitch note in `outKeyswitch`.
+    // If `outKeyswitch` is -1, no keyswitch is needed.
+    // Returns true if an articulation was triggered or keyswitch was assigned.
+    bool translate(const std::string& trackName, int& note, int& velocity, int& outKeyswitch, std::string& outArticulation);
 
     // Translates Yamaha proprietary Bank Select (CC0/CC32) and Program Change (PC) to standard GM patches.
     // Returns true if a translation occurred.

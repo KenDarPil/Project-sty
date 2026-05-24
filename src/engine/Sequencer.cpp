@@ -17,6 +17,7 @@ Sequencer::Sequencer(SFF2Parser& parser, MidiOutput& midiOut, ChordRecognizer& c
         m_cachedLSB[ch]  = 0;
         m_channelMap[ch] = static_cast<uint8_t>(ch); // Identity: no remapping by default
     }
+    m_guitarOutputChannel = 11; // Default to MIDI ch 12
 }
 
 Sequencer::~Sequencer() {}
@@ -62,6 +63,7 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             int      newTransposed;
             int      velocity;
             bool     shouldErase; // true = just kill, false = retrigger
+            int      keyswitchNote;
         };
         std::vector<RetrigEntry> entries;
 
@@ -73,9 +75,10 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             uint8_t originalNote = (trackingKey >> 8)  & 0xFF;
 
             CasmRule matchedRule = m_styleData->getCasmRuleForChannel(m_currentSection, channel);
-            // Bass tracks always go to m_bassOutputChannel; others use the channel map
-            uint8_t  destChannel = isBassRule(matchedRule) ? m_bassOutputChannel
-                                                           : mapChannel(matchedRule.destChannel);
+            // Route bass and guitar strictly
+            uint8_t  destChannel = mapChannel(matchedRule.destChannel);
+            if (isBassRule(matchedRule)) destChannel = m_bassOutputChannel;
+            else if (isGuitarRule(matchedRule)) destChannel = m_guitarOutputChannel;
             int      velocity    = m_activeVelocityMap[trackingKey];
             uint8_t  rtr         = matchedRule.retriggerRule;
 
@@ -96,6 +99,7 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             entry.oldTransposed = oldTransposed;
             entry.velocity     = velocity;
             entry.shouldErase  = false;
+            entry.keyswitchNote = -1;
 
             if (rtr == 0) {
                 // RTR=0: Stop — just kill the note
@@ -130,7 +134,9 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
 
                     if (!matchedRule.trackName.empty()) {
                         std::string articulation;
-                        m_megaVoiceTranslator.translate(matchedRule.trackName, entry.newTransposed, velocity, articulation);
+                        int keyswitchNote = -1;
+                        m_megaVoiceTranslator.translate(matchedRule.trackName, entry.newTransposed, velocity, keyswitchNote, articulation);
+                        entry.keyswitchNote = keyswitchNote;
                     }
                 }
             }
@@ -150,6 +156,16 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             if (e.shouldErase) {
                 keysToErase.push_back(e.trackingKey);
             } else {
+                // If the translator demanded a keyswitch, trigger it just before the note
+                if (e.keyswitchNote != -1) {
+                    int activeKs = m_activeKeyswitchMap[e.destChannel];
+                    if (activeKs != e.keyswitchNote) {
+                        if (activeKs != 0) m_midiOut.sendNoteOff(e.destChannel, activeKs);
+                        m_midiOut.sendNoteOn(e.destChannel, e.keyswitchNote, 100);
+                        m_activeKeyswitchMap[e.destChannel] = e.keyswitchNote;
+                    }
+                }
+
                 m_midiOut.sendNoteOn(e.destChannel, e.newTransposed, e.velocity);
                 keysToUpdate.push_back({e.trackingKey, e.newTransposed});
             }
@@ -178,8 +194,10 @@ void Sequencer::killAllActiveNotesLocked() {
         int      transformedNote = pair.second;
         uint8_t  srcChannel    = (trackingKey >> 16) & 0x0F;
         CasmRule rule = m_styleData->getCasmRuleForChannel(m_currentSection, srcChannel);
-        // Bass tracks were sent to m_bassOutputChannel, so NoteOff must go there too
-        uint8_t outCh = isBassRule(rule) ? m_bassOutputChannel : mapChannel(rule.destChannel);
+        // Bass tracks were sent to m_bassOutputChannel, Guitar to m_guitarOutputChannel, so NoteOff must go there too
+        uint8_t outCh = mapChannel(rule.destChannel);
+        if (isBassRule(rule)) outCh = m_bassOutputChannel;
+        else if (isGuitarRule(rule)) outCh = m_guitarOutputChannel;
         m_midiOut.sendNoteOff(outCh, transformedNote);
     }
     m_activeNoteMap.clear();
@@ -323,9 +341,10 @@ void Sequencer::setSection(const std::string& sectionName) {
                             break;
                         }
                     }
-                    // Bass tracks always go to m_bassOutputChannel; others use channel map
-                    uint8_t outCh = isBassRule(tempRule) ? m_bassOutputChannel
-                                                         : mapChannel(casmDest);
+                    // Bass tracks always go to m_bassOutputChannel; Guitar to m_guitarOutputChannel; others use channel map
+                    uint8_t outCh = mapChannel(casmDest);
+                    if (isBassRule(tempRule)) outCh = m_bassOutputChannel;
+                    else if (isGuitarRule(tempRule)) outCh = m_guitarOutputChannel;
 
                     if (type == 0xC0) {
                         uint8_t program = ev.data1;
@@ -340,15 +359,17 @@ void Sequencer::setSection(const std::string& sectionName) {
                         m_cachedLSB[outCh] = bankLSB;
                         m_midiOut.sendProgramChange(outCh, program);
                         
-                        // Print routing row (highlights bass in bold via marker)
-                        std::string bassTag = isBassRule(tempRule) ? " <<< BASS" : "";
+                        // Print routing row (highlights bass/guitar in bold via marker)
+                        std::string tag = "";
+                        if (isBassRule(tempRule)) tag = " <<< BASS";
+                        else if (isGuitarRule(tempRule)) tag = " <<< GUITAR";
                         std::cout << "  " << trackName;
                         for (int p = trackName.size(); p < 16; ++p) std::cout << ' ';
                         std::cout << "| src ch" << (int)channel+1
                                   << "  | casm ch" << (int)casmDest+1
                                   << "  | >>> MIDI Ch " << (int)outCh+1
                                   << "  (Bank " << (int)bankMSB << ":" << (int)bankLSB
-                                  << ", PC " << (int)program << ")" << bassTag << std::endl;
+                                  << ", PC " << (int)program << ")" << tag << std::endl;
                     }
                     else if (type == 0xB0 && ev.data1 != 0 && ev.data1 != 32) {
                         m_midiOut.sendControlChange(outCh, ev.data1, ev.data2);
@@ -408,12 +429,17 @@ void Sequencer::tick(uint32_t currentTick) {
 
         // 5. Bypass Rules for Global Data
         if (type == 0xE0) {
-            m_midiOut.sendPitchBend(mapChannel(channelRule.destChannel), ev.data1, ev.data2);
+            uint8_t outCh = mapChannel(channelRule.destChannel);
+            if (isBassRule(channelRule)) outCh = m_bassOutputChannel;
+            else if (isGuitarRule(channelRule)) outCh = m_guitarOutputChannel;
+            m_midiOut.sendPitchBend(outCh, ev.data1, ev.data2);
             m_eventIndex++;
             continue;
         }
         else if (type == 0xB0) {
             uint8_t outCh = mapChannel(channelRule.destChannel);
+            if (isBassRule(channelRule)) outCh = m_bassOutputChannel;
+            else if (isGuitarRule(channelRule)) outCh = m_guitarOutputChannel;
             m_midiOut.sendControlChange(outCh, ev.data1, ev.data2);
             if (ev.data1 == 0) {
                 m_cachedMSB[outCh] = ev.data2;
@@ -424,7 +450,9 @@ void Sequencer::tick(uint32_t currentTick) {
             continue;
         }
         else if (type == 0xC0) {
-            uint8_t outCh   = mapChannel(channelRule.destChannel);
+            uint8_t outCh = mapChannel(channelRule.destChannel);
+            if (isBassRule(channelRule)) outCh = m_bassOutputChannel;
+            else if (isGuitarRule(channelRule)) outCh = m_guitarOutputChannel;
             uint8_t program = ev.data1;
             uint8_t bankMSB = m_cachedMSB[outCh];
             uint8_t bankLSB = m_cachedLSB[outCh];
@@ -512,9 +540,10 @@ void Sequencer::tick(uint32_t currentTick) {
                 while (transformedNote > 67) transformedNote -= 12;
             }
 
+            int keyswitchNote = -1;
             if (!channelRule.trackName.empty()) {
                 std::string articulation;
-                m_megaVoiceTranslator.translate(channelRule.trackName, transformedNote, velocity, articulation);
+                m_megaVoiceTranslator.translate(channelRule.trackName, transformedNote, velocity, keyswitchNote, articulation);
             }
             
             {
@@ -524,9 +553,19 @@ void Sequencer::tick(uint32_t currentTick) {
                 m_activeVelocityMap[trackingKey] = velocity;
             }
 
-            // Route bass tracks to m_bassOutputChannel regardless of CASM destChannel
-            uint8_t outCh = isBassRule(channelRule) ? m_bassOutputChannel
-                                                    : mapChannel(channelRule.destChannel);
+            // Route bass and guitar tracks strictly
+            uint8_t outCh = mapChannel(channelRule.destChannel);
+            if (isBassRule(channelRule)) outCh = m_bassOutputChannel;
+            else if (isGuitarRule(channelRule)) outCh = m_guitarOutputChannel;
+
+            if (keyswitchNote != -1) {
+                int activeKs = m_activeKeyswitchMap[outCh];
+                if (activeKs != keyswitchNote) {
+                    if (activeKs != 0) m_midiOut.sendNoteOff(outCh, activeKs);
+                    m_midiOut.sendNoteOn(outCh, keyswitchNote, 100);
+                    m_activeKeyswitchMap[outCh] = keyswitchNote;
+                }
+            }
 
             std::cout << "[Tick] NoteOn: Track='" << channelRule.trackName
                       << "' srcCh=" << (int)channel+1
@@ -553,8 +592,9 @@ void Sequencer::tick(uint32_t currentTick) {
                 }
             }
             
-            uint8_t outCh = isBassRule(channelRule) ? m_bassOutputChannel
-                                                    : mapChannel(channelRule.destChannel);
+            uint8_t outCh = mapChannel(channelRule.destChannel);
+            if (isBassRule(channelRule)) outCh = m_bassOutputChannel;
+            else if (isGuitarRule(channelRule)) outCh = m_guitarOutputChannel;
             if (noteToTurnOff != -1) {
                 m_midiOut.sendNoteOff(outCh, noteToTurnOff);
             } else {

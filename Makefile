@@ -3,7 +3,7 @@ CXXFLAGS = -std=c++17 -Wall -I"src" -I"vendor/rtmidi"
 LDFLAGS = -lasound -lpthread
 
 # Find all C++ files in src/
-SRCS = $(wildcard src/*.cpp) $(wildcard src/reader/*.cpp) vendor/rtmidi/RtMidi.cpp
+SRCS = $(wildcard src/*.cpp) $(wildcard src/reader/*.cpp) $(wildcard src/engine/*.cpp) $(wildcard src/listener/*.cpp) $(wildcard src/clock/*.cpp) vendor/rtmidi/RtMidi.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 TARGET = ArrangerEngine
