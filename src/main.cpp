@@ -80,18 +80,19 @@ int main(int argc, char* argv[]) {
     engine::Sequencer sequencer(parser, midiOut, liveListener.getChordRecognizer());
 
     // --- CHANNEL OVERRIDE MAP ---
-    // The CASM rules in the style file define their own destination channels.
-    // Use setChannelMap(casmChannel, outputChannel) to reroute any track to
-    // a different MIDI channel to match your VST/Carla setup.
+    // The engine automatically identifies Bass and Guitar tracks via track names and NTT rules.
+    // Here we explicitly define the channels where we want these instruments sent,
+    // so they perfectly match the setup in Carla/DAW.
     //
-    // Both values are 0-based (MIDI ch 11 = index 10).
-    // Yamaha style bass tracks are typically on CASM dest channel 2 (MIDI ch 3).
-    // Redirect it to index 10 (MIDI ch 11) where your bass VST listens.
-    sequencer.setChannelMap(2, 10);  // CASM ch3 (bass) -> MIDI ch11
-    // Also cover edge cases where the style uses a different bass dest channel:
-    sequencer.setChannelMap(3, 10);  // CASM ch4 -> MIDI ch11 (some styles)
-    // Add more lines here if other tracks need rerouting, e.g.:
-    // sequencer.setChannelMap(5, 14); // CASM ch6 (pad) -> MIDI ch15
+    // VALUES ARE 0-BASED (e.g. 10 = MIDI Channel 11).
+    //
+    // RECOMMENDED CARLA VST SETUP:
+    // - Addictive Drums (or FluidSynth Drum Kit) -> MIDI Channel 10
+    // - Ample Bass -> MIDI Channel 11
+    // - Ample Guitar -> MIDI Channel 12
+
+    sequencer.setBassOutputChannel(10);   // MIDI Ch 11
+    sequencer.setGuitarOutputChannel(11); // MIDI Ch 12
 
     
     engine::StyleController styleController;

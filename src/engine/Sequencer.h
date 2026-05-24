@@ -40,6 +40,11 @@ public:
     void setBassOutputChannel(uint8_t ch) { m_bassOutputChannel = ch; }
     uint8_t getBassOutputChannel() const  { return m_bassOutputChannel; }
 
+    // Guitar Output Channel: ALL tracks identified as guitar (by NTT==4 or track name)
+    // are force-routed to this channel. Default = 11.
+    void setGuitarOutputChannel(uint8_t ch) { m_guitarOutputChannel = ch; }
+    uint8_t getGuitarOutputChannel() const  { return m_guitarOutputChannel; }
+
     // Helper: returns true if a CASM rule identifies a bass track
     static bool isBassRule(const CasmRule& rule) {
         std::string lower = rule.trackName;
@@ -47,6 +52,16 @@ public:
         return (lower.find("bass") != std::string::npos ||
                 lower.find("bs")   != std::string::npos ||
                 rule.ntt == 3);
+    }
+
+    // Helper: returns true if a CASM rule identifies a guitar track
+    static bool isGuitarRule(const CasmRule& rule) {
+        std::string lower = rule.trackName;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        return (lower.find("guitar") != std::string::npos ||
+                lower.find("gtr")   != std::string::npos ||
+                lower.find("gt")   != std::string::npos ||
+                rule.ntt == 4);
     }
 
 private:
@@ -80,6 +95,9 @@ private:
 
     // Dedicated bass output channel (0-based). All bass tracks are routed here.
     uint8_t m_bassOutputChannel;
+
+    // Dedicated guitar output channel (0-based). All guitar tracks are routed here.
+    uint8_t m_guitarOutputChannel;
 
     // Thread Safety & State Cache
     std::mutex m_chordMutex;

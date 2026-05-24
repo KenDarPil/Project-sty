@@ -9,8 +9,10 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #else
-// Define placeholder types for non-Windows platforms (though user is on Windows)
+// Define placeholder types for non-Windows platforms
 typedef int SOCKET;
+#define INVALID_SOCKET -1
+#define SOCKET_ERROR -1
 #endif
 
 namespace engine {

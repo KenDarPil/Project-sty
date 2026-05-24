@@ -85,11 +85,17 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
     }
 
     // Protect MegaVoice Keyswitches (Articulations) from being pitch-shifted
+    // We pass them through untouched here so that MegaVoiceTranslator can handle them
+    // instead of pitching them up and ruining the articulation mapping.
     bool isBassTrack = (rule.destChannel == 10 || rule.ntt == 3);
     if (isBassTrack && sourceNote < 28) {
         return sourceNote;
     }
     if (rule.ntt == 4 && sourceNote < 40) { // Guitar Track
+        return sourceNote;
+    }
+    // Also protect extremely high MegaVoice noises
+    if ((isBassTrack || rule.ntt == 4) && sourceNote > 90) {
         return sourceNote;
     }
 
