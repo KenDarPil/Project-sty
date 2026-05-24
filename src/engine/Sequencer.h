@@ -2,6 +2,8 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <mutex>
+#include <unordered_map>
 #include "../reader/SFF2Parser.h"
 #include "../listener/MidiOutput.h"
 #include "TranspositionBrain.h"
@@ -18,6 +20,9 @@ public:
     void setSection(const std::string& sectionName);
     void tick(uint32_t absoluteTick);
     void clearNoteMemory();
+    
+    void updateLiveChord(const Chord& newChord);
+    bool isPlaying() const;
 
 private:
     SFF2Parser& m_parser;
@@ -44,6 +49,15 @@ private:
     // Cache for Bank Select MSB/LSB per destination channel
     uint8_t m_cachedMSB[16];
     uint8_t m_cachedLSB[16];
+
+    // Thread Safety & State Cache
+    std::mutex m_chordMutex;
+    Chord m_activeChord;
+    std::unordered_map<uint32_t, int> m_activeNoteMap;
+    std::unordered_map<uint32_t, int> m_activeVelocityMap;
+    SFF2Parser* m_styleData;
+
+    void killAllActiveNotes();
 };
 
 } // namespace engine

@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <functional>
 
 namespace engine {
 
@@ -23,6 +24,8 @@ public:
     
     void setSplitPoint(int splitPoint) { m_splitPoint = splitPoint; }
     int getSplitPoint() const { return m_splitPoint; }
+    
+    void setChordCallback(std::function<void(const Chord&)> cb) { m_chordCallback = cb; }
 
     // The callback must be static for RtMidi
     static void midiCallback(double deltatime, std::vector<unsigned char> *message, void *userData);
@@ -33,6 +36,7 @@ private:
     std::unique_ptr<RtMidiIn> m_midiIn;
     ChordRecognizer m_chordRecognizer;
     std::string m_lastChordString;
+    std::function<void(const Chord&)> m_chordCallback;
     int m_splitPoint = 54; // Default to F#2 (MIDI Note 54)
 };
 
