@@ -32,6 +32,10 @@ public:
     // Returns true if a translation occurred.
     bool translatePatch(const std::string& trackName, uint8_t& bankMSB, uint8_t& bankLSB, uint8_t& program);
 
+    // Detects if a Yamaha note/velocity triggers a keyswitch articulation for Ample Sound VST.
+    // Returns the keyswitch note number (27, 31, 33) or -1.
+    int detectKeyswitch(const std::string& trackName, int note, int velocity);
+
 private:
     // Maps a track name (e.g., "guitar27") to its list of articulation rules
     std::map<std::string, std::vector<ArticulationRule>> m_rules;

@@ -140,6 +140,10 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
         // Phase 2: Kill ALL old notes first (prevents polyphony clipping burst)
         for (const auto& e : entries) {
             m_midiOut.sendNoteOff(e.destChannel, e.oldTransposed);
+            auto itKs = m_activeKeyswitchMap.find(e.trackingKey);
+            if (itKs != m_activeKeyswitchMap.end()) {
+                m_midiOut.sendNoteOff(e.destChannel, itKs->second);
+            }
         }
 
         // Phase 3: Start new notes (only for non-erased entries)
@@ -150,6 +154,10 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             if (e.shouldErase) {
                 keysToErase.push_back(e.trackingKey);
             } else {
+                auto itKs = m_activeKeyswitchMap.find(e.trackingKey);
+                if (itKs != m_activeKeyswitchMap.end()) {
+                    m_midiOut.sendNoteOn(e.destChannel, itKs->second, e.velocity);
+                }
                 m_midiOut.sendNoteOn(e.destChannel, e.newTransposed, e.velocity);
                 keysToUpdate.push_back({e.trackingKey, e.newTransposed});
             }
@@ -158,6 +166,7 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
         for (uint32_t key : keysToErase) {
             m_activeNoteMap.erase(key);
             m_activeVelocityMap.erase(key);
+            m_activeKeyswitchMap.erase(key);
         }
         for (const auto& p : keysToUpdate) {
             m_activeNoteMap[p.first] = p.second;
@@ -184,6 +193,16 @@ void Sequencer::killAllActiveNotesLocked() {
     }
     m_activeNoteMap.clear();
     m_activeVelocityMap.clear();
+
+    for (const auto& pair : m_activeKeyswitchMap) {
+        uint32_t trackingKey   = pair.first;
+        int      keyswitchNote = pair.second;
+        uint8_t  srcChannel    = (trackingKey >> 16) & 0x0F;
+        CasmRule rule = m_styleData->getCasmRuleForChannel(m_currentSection, srcChannel);
+        uint8_t outCh = isBassRule(rule) ? m_bassOutputChannel : mapChannel(rule.destChannel);
+        m_midiOut.sendNoteOff(outCh, keyswitchNote);
+    }
+    m_activeKeyswitchMap.clear();
 }
 
 void Sequencer::setSection(const std::string& sectionName) {
@@ -486,10 +505,18 @@ void Sequencer::tick(uint32_t currentTick) {
                 velocity = 100;
             }
 
-            // FIX: Intercept and discard keyswitches BEFORE transposing or folding!
-            if ((isGuitar && originalNote < 40) || (isBass && originalNote < 28)) {
-                m_eventIndex++;
-                continue;
+            int keyswitchNote = -1;
+            if (isGuitar || isBass) {
+                keyswitchNote = m_megaVoiceTranslator.detectKeyswitch(channelRule.trackName, originalNote, velocity);
+
+                // Check if the note is an out-of-bounds Yamaha noise note
+                bool isOutOfBounds = (isGuitar && (originalNote < 40 || originalNote > 84)) ||
+                                     (isBass   && (originalNote < 28 || originalNote > 67));
+                if (isOutOfBounds && keyswitchNote == -1) {
+                    // Drop unmappable noise notes entirely
+                    m_eventIndex++;
+                    continue;
+                }
             }
 
             int transformedNote = originalNote;
@@ -522,6 +549,9 @@ void Sequencer::tick(uint32_t currentTick) {
                 uint32_t trackingKey = (channel << 16) | (originalNote << 8);
                 m_activeNoteMap[trackingKey] = transformedNote;
                 m_activeVelocityMap[trackingKey] = velocity;
+                if (keyswitchNote != -1) {
+                    m_activeKeyswitchMap[trackingKey] = keyswitchNote;
+                }
             }
 
             // Route bass tracks to m_bassOutputChannel regardless of CASM destChannel
@@ -533,8 +563,15 @@ void Sequencer::tick(uint32_t currentTick) {
                       << " casmDest=" << (int)channelRule.destChannel+1
                       << " outCh=" << (int)outCh+1
                       << " note=" << (int)transformedNote
-                      << " vel=" << (int)velocity << std::endl;
+                      << " vel=" << (int)velocity;
+            if (keyswitchNote != -1) {
+                std::cout << " (Keyswitch=" << keyswitchNote << ")";
+            }
+            std::cout << std::endl;
 
+            if (keyswitchNote != -1) {
+                m_midiOut.sendNoteOn(outCh, keyswitchNote, 100);
+            }
             m_midiOut.sendNoteOn(outCh, transformedNote, velocity);
         }
         // 4. Note-Off Alignment Hook
@@ -543,6 +580,7 @@ void Sequencer::tick(uint32_t currentTick) {
             uint32_t trackingKey = (channel << 16) | (originalNote << 8);
             
             int noteToTurnOff = -1;
+            int keyswitchToTurnOff = -1;
             {
                 std::lock_guard<std::mutex> lock(m_chordMutex);
                 auto it = m_activeNoteMap.find(trackingKey);
@@ -550,6 +588,11 @@ void Sequencer::tick(uint32_t currentTick) {
                     noteToTurnOff = it->second;
                     m_activeNoteMap.erase(it);
                     m_activeVelocityMap.erase(trackingKey);
+                }
+                auto itKs = m_activeKeyswitchMap.find(trackingKey);
+                if (itKs != m_activeKeyswitchMap.end()) {
+                    keyswitchToTurnOff = itKs->second;
+                    m_activeKeyswitchMap.erase(itKs);
                 }
             }
             
@@ -559,6 +602,10 @@ void Sequencer::tick(uint32_t currentTick) {
                 m_midiOut.sendNoteOff(outCh, noteToTurnOff);
             } else {
                 m_midiOut.sendNoteOff(outCh, originalNote);
+            }
+
+            if (keyswitchToTurnOff != -1) {
+                m_midiOut.sendNoteOff(outCh, keyswitchToTurnOff);
             }
         }
         

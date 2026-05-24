@@ -158,4 +158,45 @@ bool MegaVoiceTranslator::translatePatch(const std::string& trackName, uint8_t& 
     return false;
 }
 
+int MegaVoiceTranslator::detectKeyswitch(const std::string& trackName, int note, int velocity) {
+    std::string lowerTrack = trackName;
+    for (auto& c : lowerTrack) c = std::tolower(c);
+    
+    bool isGuitar = (lowerTrack.find("gtr") != std::string::npos || 
+                     lowerTrack.find("gt") != std::string::npos || 
+                     lowerTrack.find("guitar") != std::string::npos);
+    bool isBass = (lowerTrack.find("bass") != std::string::npos || 
+                   lowerTrack.find("bs") != std::string::npos || 
+                   lowerTrack.find("ba") != std::string::npos);
+
+    if (isBass) {
+        // Pop (Pop Bass): Return MIDI Note 33 (A0)
+        // Usually triggered by Yamaha out-of-bounds pop notes like 15 or 16, or keyswitch 33.
+        if (note == 15 || note == 16 || note == 33) {
+            return 33;
+        }
+        
+        // Slide (Slide In/Out): Return MIDI Note 27 (D#0)
+        // Usually triggered by velocity >= 120, or notes 12 (C0), 14 (D0), or 27.
+        if (velocity >= 120 || note == 12 || note == 14 || note == 27) {
+            return 27;
+        }
+        
+        // Slap (Slap Bass): Return MIDI Note 31 (G0)
+        // Usually triggered by velocity >= 110 (or velocity > 115), or note 13 (C#0), or 31.
+        if (velocity >= 110 || note == 13 || note == 31) {
+            return 31;
+        }
+    }
+    else if (isGuitar) {
+        // Slide (Slide In/Out): Return MIDI Note 27 (D#0)
+        // Usually triggered by velocity >= 120, or note 24 (C1), or 27.
+        if (velocity >= 120 || note == 24 || note == 27) {
+            return 27;
+        }
+    }
+    
+    return -1;
+}
+
 } // namespace engine
