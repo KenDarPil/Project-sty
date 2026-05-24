@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 #include <mutex>
+#include <algorithm>
 #include <unordered_map>
 #include "../reader/SFF2Parser.h"
 #include "../listener/MidiOutput.h"

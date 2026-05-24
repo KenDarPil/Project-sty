@@ -84,6 +84,15 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
         return sourceNote;
     }
 
+    // Protect MegaVoice Keyswitches (Articulations) from being pitch-shifted
+    bool isBassTrack = (rule.destChannel == 10 || rule.ntt == 3);
+    if (isBassTrack && sourceNote < 28) {
+        return sourceNote;
+    }
+    if (rule.ntt == 4 && sourceNote < 40) { // Guitar Track
+        return sourceNote;
+    }
+
     int sourcePitchClass = sourceNote % 12;
     
     // 2. Derive Style Scale Degree Interval relative to recorded file metadata
