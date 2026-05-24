@@ -88,7 +88,7 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             bool isBass   = (lowerTrackName.find("bass") != std::string::npos ||
                              lowerTrackName.find("bs")   != std::string::npos ||
                              matchedRule.ntt == 3 ||
-                             destChannel == 10); // MIDI Ch 11 = index 10 = bass
+                             destChannel == m_bassOutputChannel); // Dynamic bass channel check
 
             RetrigEntry entry;
             entry.trackingKey  = trackingKey;
@@ -478,7 +478,7 @@ void Sequencer::tick(uint32_t currentTick) {
             bool isBass = (lowerTrackName.find("bass") != std::string::npos || 
                            lowerTrackName.find("bs")   != std::string::npos ||
                            channelRule.ntt == 3 ||
-                           channelRule.destChannel == 10); // MIDI Ch 11 = index 10 = bass
+                           channelRule.destChannel == m_bassOutputChannel); // Dynamic bass channel check
 
             // Global velocity soft-limit: prevent clipping from many simultaneous voices
             // High-velocity articulation triggers (>= 115) are exempt from limiting
