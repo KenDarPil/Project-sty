@@ -18,20 +18,29 @@ std::string Chord::toString() const {
     return result;
 }
 
-ChordRecognizer::ChordRecognizer() {}
+ChordRecognizer::ChordRecognizer() : m_isReleaseEvent(false) {}
 ChordRecognizer::~ChordRecognizer() {}
 
 void ChordRecognizer::noteOn(int noteNumber) {
     m_heldNotes.insert(noteNumber);
+    m_isReleaseEvent = false;
 }
 
 void ChordRecognizer::noteOff(int noteNumber) {
     m_heldNotes.erase(noteNumber);
+    m_isReleaseEvent = true;
 }
 
 Chord ChordRecognizer::detectChord() {
     Chord chord = {-1, "", -1};
     
+    // Release Phase Filter: Do not recognize new chords during key releases.
+    // This completely prevents random/accidental chords from playing when fingers are lifted.
+    // Chord updates will only occur when a new key is pressed (Note On event).
+    if (m_isReleaseEvent) {
+        return chord; // Return No Chord (-1) to latch/maintain the last chord in memory!
+    }
+
     // STRICT FINGERED MODE: Require at least 3 notes. 
     // (Prevents muddy sound from accidental single/double key presses)
     if (m_heldNotes.size() < 2) { 
@@ -70,6 +79,10 @@ Chord ChordRecognizer::detectChord() {
         std::sort(intervals.begin(), intervals.end());
         
         // 5-note chords
+        if (intervals == std::vector<int>{0, 2, 4, 7, 9})  { chord.rootNote = candidateRoot; chord.type = "6(9)"; break; }
+        if (intervals == std::vector<int>{0, 2, 3, 7, 9})  { chord.rootNote = candidateRoot; chord.type = "m6(9)"; break; }
+        if (intervals == std::vector<int>{0, 3, 4, 7, 10}) { chord.rootNote = candidateRoot; chord.type = "7(#9)"; break; }
+        if (intervals == std::vector<int>{0, 1, 4, 7, 10}) { chord.rootNote = candidateRoot; chord.type = "7(b9)"; break; }
         if (intervals == std::vector<int>{0, 2, 4, 7, 10}) { chord.rootNote = candidateRoot; chord.type = "9"; break; }
         if (intervals == std::vector<int>{0, 2, 4, 7, 11}) { chord.rootNote = candidateRoot; chord.type = "M9"; break; }
         if (intervals == std::vector<int>{0, 2, 3, 7, 10}) { chord.rootNote = candidateRoot; chord.type = "m9"; break; }

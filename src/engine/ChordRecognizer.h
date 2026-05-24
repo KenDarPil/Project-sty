@@ -29,6 +29,7 @@ public:
 
 private:
     std::set<int> m_heldNotes; // Stores raw MIDI note numbers (0-127)
+    bool m_isReleaseEvent = false; // Tracks if the last event was a key release
 };
 
 } // namespace engine

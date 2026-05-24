@@ -34,9 +34,9 @@ int main(int argc, char* argv[]) {
     }
     liveListener.openPort(inPort);
     
-    // Set split point (MIDI Note 54 / F#2)
-    liveListener.setSplitPoint(54);
-    std::cout << "Split Point active at MIDI Note " << liveListener.getSplitPoint() << " (F#2)" << std::endl;
+    // Set split point (MIDI Note 59 / B2)
+    liveListener.setSplitPoint(59);
+    std::cout << "Split Point active at MIDI Note " << liveListener.getSplitPoint() << " (B2)" << std::endl;
     
     std::cout << "\n--- MIDI Output Settings (loopMIDI/VST) ---" << std::endl;
     engine::MidiOutput midiOut;

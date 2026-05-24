@@ -215,7 +215,7 @@ void SFF2Parser::parseCSEG(const char* data, uint32_t length) {
         
         if (subId == "Sdec") {
             parseSdec(subData, subLen);
-        } else if (subId == "Ctab") {
+        } else if (subId == "Ctab" || subId == "Ctb2") {
             parseCtab(subData, subLen);
         } else {
             std::cout << "          Unknown CSEG Sub-chunk: [" << subId << "] Length: " << subLen << std::endl;
@@ -280,16 +280,30 @@ void SFF2Parser::parseCtab(const char* data, uint32_t length) {
     }
 
     rule.destChannel = static_cast<uint8_t>(data[9]);
-    rule.playNote = static_cast<uint8_t>(data[10]);
-    rule.playChord = static_cast<uint8_t>(data[11]);
-    rule.highKey = static_cast<uint8_t>(data[12]);
-    rule.noteLimitLow = static_cast<uint8_t>(data[13]);
-    rule.noteLimitHigh = static_cast<uint8_t>(data[14]);
-    rule.retriggerRule = static_cast<uint8_t>(data[15]);
-    rule.ntr = static_cast<uint8_t>(data[16]);
-    rule.ntt = static_cast<uint8_t>(data[17]);
+
+    // Yamaha standard default settings for CASM rules
+    rule.playNote = 1;  // Transpose notes by default
+    rule.playChord = 1; // Adapt notes to chord type by default
+    rule.highKey = 0xFF;
+    rule.noteLimitLow = 0;
+    rule.noteLimitHigh = 127;
+    rule.retriggerRule = 0;
+    rule.ntr = 0;
+    rule.ntt = 0;
     rule.sourceRoot = m_sourceRoot;
     rule.sourceChordType = m_sourceChordType;
+
+    // Correctly map parameter bytes according to exact reverse-engineered offsets
+    if (length >= 25) {
+        rule.highKey = static_cast<uint8_t>(data[17]);
+        rule.sourceRoot = static_cast<uint8_t>(data[18]);
+        rule.sourceChordType = static_cast<uint8_t>(data[19]);
+        rule.ntr = static_cast<uint8_t>(data[20]);
+        rule.ntt = static_cast<uint8_t>(data[21]);
+        rule.retriggerRule = static_cast<uint8_t>(data[22]);
+        rule.noteLimitLow = static_cast<uint8_t>(data[23]);
+        rule.noteLimitHigh = static_cast<uint8_t>(data[24]);
+    }
 
     // Store the rest of the raw bytes
     for (uint32_t i = 18; i < length; i++) {

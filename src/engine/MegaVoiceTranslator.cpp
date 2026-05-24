@@ -24,8 +24,8 @@ MegaVoiceTranslator::MegaVoiceTranslator() {
     }
     
     // Bass rules (Acoustic, Fingered, Picked)
-    ArticulationRule bassSlide = {120, 12, 100, true, "Bass Slide"};
-    ArticulationRule bassSlap = {110, 13, 90, true, "Bass Slap"};
+    ArticulationRule bassSlide = {120, 12, 100, false, "Bass Slide"};
+    ArticulationRule bassSlap = {110, 13, 90, false, "Bass Slap"};
     std::vector<std::string> bassTracks = {"bass", "bass1", "bass2", "bs", "bs1", "bs2", "abass", "fbass", "pbass"};
     for (const auto& track : bassTracks) {
         addRule(track, bassSlide);

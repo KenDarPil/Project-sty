@@ -33,7 +33,7 @@ private:
     std::unique_ptr<RtMidiIn> m_midiIn;
     ChordRecognizer m_chordRecognizer;
     std::string m_lastChordString;
-    int m_splitPoint = 54; // Default to F#2 (MIDI Note 54)
+    int m_splitPoint = 59; // Default to B2 (MIDI Note 59)
 };
 
 } // namespace engine

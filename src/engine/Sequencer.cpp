@@ -1,5 +1,7 @@
 #include "Sequencer.h"
 #include <iostream>
+#include <algorithm>
+#include <cctype>
 
 namespace engine {
 
@@ -34,7 +36,11 @@ void Sequencer::setSection(const std::string& sectionName) {
     bool foundStart = false;
     for (size_t i = 0; i < events.size(); i++) {
         if (events[i].status == 0xFF && (events[i].data1 == 0x06 || events[i].data1 == 0x01)) {
-            if (!foundStart && events[i].metaText == sectionName) {
+            std::string metaLower = events[i].metaText;
+            std::string sectionLower = sectionName;
+            std::transform(metaLower.begin(), metaLower.end(), metaLower.begin(), ::tolower);
+            std::transform(sectionLower.begin(), sectionLower.end(), sectionLower.begin(), ::tolower);
+            if (!foundStart && metaLower == sectionLower) {
                 m_sectionStartTick = events[i].absoluteTick;
                 m_eventIndex = i;
                 foundStart = true;
@@ -180,7 +186,11 @@ void Sequencer::tick(uint32_t currentTick) {
                     CasmRule matchedRule;
                     bool ruleFound = false;
                     for (const auto& rule : rules) {
-                        if (rule.destChannel == ch && rule.appliedSections.find(m_currentSection) != std::string::npos) {
+                        std::string ruleSectionsLower = rule.appliedSections;
+                        std::string currentSectionLower = m_currentSection;
+                        std::transform(ruleSectionsLower.begin(), ruleSectionsLower.end(), ruleSectionsLower.begin(), ::tolower);
+                        std::transform(currentSectionLower.begin(), currentSectionLower.end(), currentSectionLower.begin(), ::tolower);
+                        if (rule.destChannel == ch && ruleSectionsLower.find(currentSectionLower) != std::string::npos) {
                             if (rule.trackName.find("CC") != std::string::npos) continue;
                             matchedRule = rule;
                             ruleFound = true;
@@ -192,14 +202,15 @@ void Sequencer::tick(uint32_t currentTick) {
                         uint8_t rtr = matchedRule.retriggerRule;
                         int velocity = m_playingVelocities[ch][n];
                         
-                        bool isGuitar = (matchedRule.trackName.find("Gtr") != std::string::npos || 
-                                         matchedRule.trackName.find("gtr") != std::string::npos ||
-                                         matchedRule.trackName.find("Guitar") != std::string::npos ||
-                                         matchedRule.trackName.find("guitar") != std::string::npos ||
+                        std::string lowerRuleTrack = matchedRule.trackName;
+                        std::transform(lowerRuleTrack.begin(), lowerRuleTrack.end(), lowerRuleTrack.begin(), ::tolower);
+                        
+                        bool isGuitar = (lowerRuleTrack.find("gtr") != std::string::npos || 
+                                         lowerRuleTrack.find("guitar") != std::string::npos ||
                                          matchedRule.ntt == 4);
                                          
-                        bool isBass = (matchedRule.trackName.find("Bass") != std::string::npos || 
-                                       matchedRule.trackName.find("bass") != std::string::npos ||
+                        bool isBass = (lowerRuleTrack.find("bass") != std::string::npos || 
+                                       lowerRuleTrack.find("bs") != std::string::npos ||
                                        matchedRule.ntt == 3);
                         
                         if (rtr == 0) {
@@ -219,7 +230,7 @@ void Sequencer::tick(uint32_t currentTick) {
                             }
                             else if (isBass) {
                                 while (newTransposed < 28) newTransposed += 12;
-                                while (newTransposed > 67) newTransposed -= 12;
+                                while (newTransposed > 51) newTransposed -= 12;
                             }
                                                    
                             if ((isGuitar && newTransposed < 40) || (isBass && newTransposed < 28)) {
@@ -252,7 +263,7 @@ void Sequencer::tick(uint32_t currentTick) {
                             }
                             else if (isBass) {
                                 while (newTransposed < 28) newTransposed += 12;
-                                while (newTransposed > 67) newTransposed -= 12;
+                                while (newTransposed > 51) newTransposed -= 12;
                             }
                                                    
                             if ((isGuitar && newTransposed < 40) || (isBass && newTransposed < 28)) {
@@ -327,8 +338,12 @@ void Sequencer::tick(uint32_t currentTick) {
         CasmRule matchedRule;
         
         for (const auto& rule : rules) {
-            // FIX: Match the event's channel against rule.sourceChannel!
-            if (rule.sourceChannel == channel && rule.appliedSections.find(m_currentSection) != std::string::npos) {
+            std::string ruleSectionsLower = rule.appliedSections;
+            std::string currentSectionLower = m_currentSection;
+            std::transform(ruleSectionsLower.begin(), ruleSectionsLower.end(), ruleSectionsLower.begin(), ::tolower);
+            std::transform(currentSectionLower.begin(), currentSectionLower.end(), currentSectionLower.begin(), ::tolower);
+            // Match the event's channel against rule.sourceChannel!
+            if (rule.sourceChannel == channel && ruleSectionsLower.find(currentSectionLower) != std::string::npos) {
                 if (rule.trackName.find("CC") != std::string::npos) continue;
                 destChannel = rule.destChannel;
                 trackName = rule.trackName;
@@ -364,14 +379,15 @@ void Sequencer::tick(uint32_t currentTick) {
                     continue; // Skip sending the Note On
                 }
 
-                bool isGuitar = (trackName.find("Gtr") != std::string::npos || 
-                                 trackName.find("gtr") != std::string::npos ||
-                                 trackName.find("Guitar") != std::string::npos ||
-                                 trackName.find("guitar") != std::string::npos ||
+                std::string lowerTrackName = trackName;
+                std::transform(lowerTrackName.begin(), lowerTrackName.end(), lowerTrackName.begin(), ::tolower);
+                
+                bool isGuitar = (lowerTrackName.find("gtr") != std::string::npos || 
+                                 lowerTrackName.find("guitar") != std::string::npos ||
                                  matchedRule.ntt == 4);
                                  
-                bool isBass = (trackName.find("Bass") != std::string::npos || 
-                               trackName.find("bass") != std::string::npos ||
+                bool isBass = (lowerTrackName.find("bass") != std::string::npos || 
+                               lowerTrackName.find("bs") != std::string::npos ||
                                matchedRule.ntt == 3);
  
                 // Task 1: VST Velocity Clamping (Guitar & Bass tracks)
@@ -397,7 +413,7 @@ void Sequencer::tick(uint32_t currentTick) {
                     while (transposedNote < 28) {
                         transposedNote += 12;
                     }
-                    while (transposedNote > 67) {
+                    while (transposedNote > 51) {
                         transposedNote -= 12;
                     }
                 }

@@ -11,12 +11,13 @@ namespace {
 int snapToNearestChordTone(int mappedInterval, const std::string& chordType) {
     std::vector<int> chordTones;
     if (chordType == "m" || chordType == "m7" || chordType == "m9" || chordType == "m6" || 
-        chordType == "m(add9)" || chordType == "mM7" || chordType == "m7b5") {
+        chordType == "m(add9)" || chordType == "mM7" || chordType == "m7b5" || chordType == "m6(9)") {
         if (chordType == "m") chordTones = {0, 3, 7};
         else if (chordType == "m6") chordTones = {0, 3, 7, 9};
         else if (chordType == "m(add9)") chordTones = {0, 2, 3, 7};
         else if (chordType == "mM7") chordTones = {0, 3, 7, 11};
         else if (chordType == "m7b5") chordTones = {0, 3, 6, 10};
+        else if (chordType == "m6(9)") chordTones = {0, 2, 3, 7, 9};
         else chordTones = {0, 3, 7, 10}; // m7, m9
     }
     else if (chordType == "dim" || chordType == "dim7") {
@@ -33,8 +34,10 @@ int snapToNearestChordTone(int mappedInterval, const std::string& chordType) {
     else if (chordType == "sus2") {
         chordTones = {0, 2, 7};
     }
-    else if (chordType == "7" || chordType == "9" || chordType == "11" || chordType == "13" || chordType == "7b5") {
+    else if (chordType == "7" || chordType == "9" || chordType == "11" || chordType == "13" || chordType == "7b5" || chordType == "7(#9)" || chordType == "7(b9)") {
         if (chordType == "7b5") chordTones = {0, 4, 6, 10};
+        else if (chordType == "7(#9)") chordTones = {0, 3, 4, 7, 10};
+        else if (chordType == "7(b9)") chordTones = {0, 1, 4, 7, 10};
         else chordTones = {0, 4, 7, 10};
     }
     else if (chordType == "M7" || chordType == "Maj7" || chordType == "M9") {
@@ -42,6 +45,9 @@ int snapToNearestChordTone(int mappedInterval, const std::string& chordType) {
     }
     else if (chordType == "6") {
         chordTones = {0, 4, 7, 9};
+    }
+    else if (chordType == "6(9)") {
+        chordTones = {0, 2, 4, 7, 9};
     }
     else if (chordType == "add9") {
         chordTones = {0, 2, 4, 7};
@@ -108,7 +114,7 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
 
     bool isSourceMinor = (rule.sourceChordType >= 0x08 && rule.sourceChordType <= 0x0B);
     bool isLiveMinor = (type == "m" || type == "m7" || type == "m9" || type == "m6" || 
-                        type == "m(add9)" || type == "mM7" || type == "m7b5");
+                        type == "m(add9)" || type == "mM7" || type == "m7b5" || type == "m6(9)");
 
     // Apply Chord Type scale degree mapping if playChord explicitly allows it
     if (rule.playChord != 0) {
@@ -137,7 +143,7 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
             }
 
             // 2. Map Sevenths / Dominants
-            bool isLiveDominant = (type == "7" || type == "9" || type == "11" || type == "13" || type == "7b5");
+            bool isLiveDominant = (type == "7" || type == "9" || type == "11" || type == "13" || type == "7b5" || type == "7(#9)" || type == "7(b9)");
             bool isLiveFlat7 = isLiveDominant || (isLiveMinor && type != "mM7");
             if (isLiveFlat7) { // Live is flat 7th (needs 10)
                 if (styleInterval == 11) {
@@ -198,7 +204,7 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
             }
 
             // 2. Map Sevenths / Dominants
-            bool isLiveDominant = (type == "7" || type == "9" || type == "11" || type == "13" || type == "7b5");
+            bool isLiveDominant = (type == "7" || type == "9" || type == "11" || type == "13" || type == "7b5" || type == "7(#9)" || type == "7(b9)");
             bool isLiveFlat7 = isLiveDominant || (isLiveMinor && type != "mM7");
             if (isLiveFlat7) {
                 if (styleInterval == 11) {
@@ -261,7 +267,7 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
                 }
             }
 
-            bool isLiveDominant = (type == "7" || type == "9" || type == "11" || type == "13" || type == "7b5");
+            bool isLiveDominant = (type == "7" || type == "9" || type == "11" || type == "13" || type == "7b5" || type == "7(#9)" || type == "7(b9)");
             bool isLiveFlat7 = isLiveDominant || (isLiveMinor && type != "mM7");
             if (isLiveFlat7) {
                 if (styleInterval == 11) {
@@ -309,19 +315,24 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
     // Now shift the mapped pitch class to the target root pitch
     int transposedNote = (sourceOctave * 12) + mappedPitchClass + liveChord.rootNote;
 
-    // --- 2. Fingered on Bass Exception ---
-    // If this track is the Bass, and the user played an inverted bass note (e.g. CMaj/E)
-    // we override the root interval and transpose strictly to the Bass note.
-    if (rule.trackName.find("bass") != std::string::npos && liveChord.bassNote != liveChord.rootNote) {
-        // Transpose the ENTIRE bass pattern relative to the inverted bass note to preserve the melody shape
-        int bassShift = liveChord.bassNote - liveChord.rootNote;
-        if (bassShift < 0) bassShift += 12;
+    // --- 2. Fingered on Bass Exception & Bass Folding ---
+    std::string lowerTrack = rule.trackName;
+    std::transform(lowerTrack.begin(), lowerTrack.end(), lowerTrack.begin(), ::tolower);
+    bool isBassTrack = (lowerTrack.find("bass") != std::string::npos || lowerTrack.find("bs") != std::string::npos || rule.ntt == 3);
+    
+    if (isBassTrack) {
+        if (liveChord.bassNote != liveChord.rootNote && liveChord.bassNote >= 0) {
+            // Transpose the ENTIRE bass pattern relative to the inverted bass note to preserve the melody shape
+            int bassShift = liveChord.bassNote - liveChord.rootNote;
+            if (bassShift < 0) bassShift += 12;
 
-        // Apply the shift to the already mapped pitch class
-        int shiftedPitchClass = (mappedPitchClass + bassShift) % 12;
-        transposedNote = (sourceOctave * 12) + shiftedPitchClass + liveChord.rootNote;
+            // Apply the shift to the already mapped pitch class
+            int shiftedPitchClass = (mappedPitchClass + bassShift) % 12;
+            transposedNote = (sourceOctave * 12) + shiftedPitchClass + liveChord.rootNote;
+        }
 
-        // Shift octaves down to keep it in the bass register
+        // ALWAYS fold all bass track notes to the standard physical bass register (28-45 / E1-A2)
+        // This ensures warm, playable bass tones and prevents silent notes in high registers
         while (transposedNote > 45) { 
             transposedNote -= 12;
         }
@@ -378,8 +389,12 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
 
 int TranspositionBrain::applyHighKey(int note, int rootNote, int highKey) {
     // Drop the ENTIRE chord an octave to preserve the voicing shape if the ROOT is too high
-    if (rootNote > highKey) {
-        return note - 12;
+    // Yamaha CASM High Key is encoded with the pitch class in the high nibble (e.g. 0x50 represents 5 = F)
+    int hkPitchClass = (highKey >> 4) & 0x0F;
+    if (hkPitchClass <= 11) {
+        if (rootNote > hkPitchClass) {
+            return note - 12;
+        }
     }
     return note;
 }
