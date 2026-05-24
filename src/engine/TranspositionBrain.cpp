@@ -74,18 +74,22 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
         return sourceNote; 
     }
 
+    // Extract the clean NTT by stripping out the SFF2 "Bass On" MSB flag
+    uint8_t cleanNtt = rule.ntt & 0x7F;
+    bool isSff2BassFlagOn = (rule.ntt & 0x80) != 0;
+
     // 1. Structural Muting & Bypass Rules
     if (rule.playNote == 0) {
         return -1; // -1 Signals the engine to swallow/mute this event entirely
     }
     
-    // Protect Rhythm Parts (Standard Yamaha targets channels 9 & 10 for drums/percussion)
+    // Protect Rhythm Parts
     if (rule.destChannel == 9 || rule.destChannel == 8) {
         return sourceNote;
     }
 
     // Protect MegaVoice Keyswitches (Articulations) from being pitch-shifted
-    bool isBassTrack = (rule.destChannel == 10 || rule.ntt == 3);
+    bool isBassTrack = (rule.destChannel == 10 || cleanNtt == 3 || isSff2BassFlagOn);
     if (isBassTrack && sourceNote < 28) {
         return sourceNote;
     }
@@ -104,10 +108,10 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
     bool isLiveMinor = checkLiveMinor(type);
 
     // 3. Process NTT (Note Transposition Table Rules)
-    if (rule.playChord != 0 && rule.ntt != 0) { // 0 = Bypass Table
+    if (rule.playChord != 0 && cleanNtt != 0) { // 0 = Bypass Table
         
-        // Handle standard scalar corrections (Melody=1, Chord=2, Bass=3, Guitar=4)
-        if (rule.ntt == 1 || rule.ntt == 2 || rule.ntt == 3 || rule.ntt == 4) {
+        // Handle standard scalar corrections using the clean NTT ID
+        if (cleanNtt == 1 || cleanNtt == 2 || cleanNtt == 3 || cleanNtt == 4) {
             
             // Map Thirds and Sixths (Major <-> Minor Conversions)
             if (isSourceMinor && !isLiveMinor) {
@@ -146,7 +150,7 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
             }
 
             // Rule 2 Specific: Chord Padding requires strict structural tone restriction
-            if (rule.ntt == 2) {
+            if (cleanNtt == 2) {
                 mappedInterval = snapToNearestChordTone(mappedInterval, type);
             }
         }
@@ -171,8 +175,8 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
     // Note: rule.ntr == 0 (Root Transposition) shifts parallelly, which our pitchOffset calculation already handles.
 
     // 6. Bass Specific Modifications (Fingered on Bass / Slash Chords)
-    // Match either by NTT type 3 OR by explicit dest channel 10 (MIDI Ch 11 = user bass channel)
-    bool isBassChannel = (rule.destChannel == 10 || rule.ntt == 3);
+    // Identify the channel dynamically using the dest channel, the clean NTT, or the SFF2 flag
+    bool isBassChannel = (rule.destChannel == 10 || cleanNtt == 3 || isSff2BassFlagOn);
     if (isBassChannel) {
         if (liveChord.bassNote != -1 && liveChord.bassNote != liveChord.rootNote) {
             // Apply strict shift mapping relative to the customized slash inversion note
@@ -191,7 +195,7 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
     }
 
     // 7. Guitar Mode Exception / Fret Alterations (NTT = 4 is Guitar SFF2)
-    if (rule.ntt == 4) {
+    if (cleanNtt == 4) {
         int intervalFromRoot = (transposedNote - liveChord.rootNote + 24) % 12;
         // Shift lower muddy intervals up an octave to replicate native open-string chord fingerboard geography
         if ((intervalFromRoot == 3 || intervalFromRoot == 4 || intervalFromRoot == 10) && transposedNote < 57) {

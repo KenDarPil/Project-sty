@@ -62,7 +62,7 @@ private:
     // CASM Sub-chunk parsers
     void parseCSEG(const char* data, uint32_t length);
     void parseSdec(const char* data, uint32_t length);
-    void parseCtab(const char* data, uint32_t length);
+    void parseCtab(const char* data, uint32_t length, bool isCtb2 = false);
 };
 
 } // namespace engine

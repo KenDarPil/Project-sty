@@ -86,6 +86,7 @@ private:
     Chord m_activeChord;
     std::unordered_map<uint32_t, int> m_activeNoteMap;
     std::unordered_map<uint32_t, int> m_activeVelocityMap;
+    std::unordered_map<uint32_t, int> m_activeKeyswitchMap;
     SFF2Parser* m_styleData;
 
     void killAllActiveNotes();

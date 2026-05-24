@@ -86,10 +86,10 @@ int main(int argc, char* argv[]) {
     //
     // Both values are 0-based (MIDI ch 11 = index 10).
     // Yamaha style bass tracks are typically on CASM dest channel 2 (MIDI ch 3).
-    // Redirect it to index 10 (MIDI ch 11) where your bass VST listens.
-    sequencer.setChannelMap(2, 10);  // CASM ch3 (bass) -> MIDI ch11
+    // Redirect it to index 0 (MIDI ch 1) where your bass VST listens.
+    sequencer.setChannelMap(2, 0);  // CASM ch3 (bass) -> MIDI ch1
     // Also cover edge cases where the style uses a different bass dest channel:
-    sequencer.setChannelMap(3, 10);  // CASM ch4 -> MIDI ch11 (some styles)
+    sequencer.setChannelMap(3, 0);  // CASM ch4 -> MIDI ch1 (some styles)
     // Add more lines here if other tracks need rerouting, e.g.:
     // sequencer.setChannelMap(5, 14); // CASM ch6 (pad) -> MIDI ch15
 
