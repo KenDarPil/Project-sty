@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Arranger Engine</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header>
+            <div class="logo">Arranger Engine <span>PRO</span></div>
+            <div class="status">
+                <span class="indicator disconnected" id="connection-indicator"></span>
+                <span id="connection-text">Disconnected</span>
+            </div>
+        </header>
+
+        <!-- Memory Banks -->
+        <section class="memory-banks">
+            <button class="bank-btn" data-bank="1">1</button>
+            <button class="bank-btn" data-bank="2">2</button>
+            <button class="bank-btn" data-bank="3">3</button>
+            <button class="bank-btn" data-bank="4">4</button>
+            <button class="bank-btn" data-bank="5">5</button>
+            <button class="bank-btn" data-bank="6">6</button>
+        </section>
+
+        <!-- Main Display -->
+        <section class="main-display">
+            <div class="glass-panel">
+                <div class="display-top">
+                    <div class="tempo-readout"><span id="tempo-val">120</span> BPM</div>
+                    <div class="section-readout" id="section-val">MAIN A</div>
+                </div>
+                <div class="chord-readout" id="chord-val">---</div>
+            </div>
+        </section>
+
+        <!-- Tempo Control -->
+        <section class="tempo-control">
+            <label for="tempo-slider">TEMPO</label>
+            <input type="range" id="tempo-slider" min="40" max="250" value="120">
+        </section>
+
+        <!-- Arranger Controls -->
+        <section class="arranger-controls">
+            <div class="control-group">
+                <button class="ctrl-btn intro-btn" onclick="sendCmd('intro', 'A')">INTRO</button>
+                <button class="ctrl-btn ending-btn" onclick="sendCmd('ending', 'A')">ENDING</button>
+            </div>
+            
+            <div class="control-group main-vars">
+                <button class="ctrl-btn main-btn active" id="btn-main-a" onclick="sendCmd('main', 'A')">MAIN A</button>
+                <button class="ctrl-btn main-btn" id="btn-main-b" onclick="sendCmd('main', 'B')">MAIN B</button>
+                <button class="ctrl-btn main-btn" id="btn-main-c" onclick="sendCmd('main', 'C')">MAIN C</button>
+                <button class="ctrl-btn main-btn" id="btn-main-d" onclick="sendCmd('main', 'D')">MAIN D</button>
+            </div>
+
+            <div class="control-group">
+                <button class="ctrl-btn fill-btn" onclick="sendCmd('fill', '')">AUTO FILL</button>
+                <button class="ctrl-btn break-btn" onclick="sendCmd('break', '')">BREAK</button>
+            </div>
+        </section>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
