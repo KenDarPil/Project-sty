@@ -185,15 +185,38 @@ void Sequencer::tick(uint32_t currentTick) {
                             // RETRIGGER or PITCH SHIFT (re-sound at transposed pitch)
                             int newTransposed = m_transpositionBrain.calculateTransposition(n, currentChord, matchedRule);
                             
-                            bool isGuitarOrBass = (matchedRule.trackName.find("Gtr") != std::string::npos || 
-                                                   matchedRule.trackName.find("gtr") != std::string::npos ||
-                                                   matchedRule.trackName.find("Guitar") != std::string::npos ||
-                                                   matchedRule.trackName.find("guitar") != std::string::npos ||
-                                                   matchedRule.trackName.find("Bass") != std::string::npos ||
-                                                   matchedRule.trackName.find("bass") != std::string::npos ||
-                                                   matchedRule.ntt == 4);
+                            bool isGuitar = (matchedRule.trackName.find("Gtr") != std::string::npos || 
+                                             matchedRule.trackName.find("gtr") != std::string::npos ||
+                                             matchedRule.trackName.find("Guitar") != std::string::npos ||
+                                             matchedRule.trackName.find("guitar") != std::string::npos ||
+                                             matchedRule.ntt == 4);
+                                             
+                            bool isBass = (matchedRule.trackName.find("Bass") != std::string::npos || 
+                                           matchedRule.trackName.find("bass") != std::string::npos ||
+                                           matchedRule.ntt == 3);
+                                           
+                            // Fold notes to stay inside VST physical playable range
+                            if (isGuitar) {
+                                while (newTransposed < 40) {
+                                    newTransposed += 12;
+                                }
+                                while (newTransposed > 84) {
+                                    newTransposed -= 12;
+                                }
+                            }
+                            else if (isBass) {
+                                while (newTransposed < 28) {
+                                    newTransposed += 12;
+                                }
+                                while (newTransposed > 67) {
+                                    newTransposed -= 12;
+                                }
+                            }
                                                    
-                            if (isGuitarOrBass && newTransposed < 40) {
+                            if (isGuitar && newTransposed < 40) {
+                                continue;
+                            }
+                            if (isBass && newTransposed < 28) {
                                 continue;
                             }
                             
@@ -297,27 +320,51 @@ void Sequencer::tick(uint32_t currentTick) {
                     continue; // Skip sending the Note On
                 }
 
-                bool isGuitarOrBass = (trackName.find("Gtr") != std::string::npos || 
-                                       trackName.find("gtr") != std::string::npos ||
-                                       trackName.find("Guitar") != std::string::npos ||
-                                       trackName.find("guitar") != std::string::npos ||
-                                       trackName.find("Bass") != std::string::npos ||
-                                       trackName.find("bass") != std::string::npos ||
-                                       matchedRule.ntt == 4);
-
+                bool isGuitar = (trackName.find("Gtr") != std::string::npos || 
+                                 trackName.find("gtr") != std::string::npos ||
+                                 trackName.find("Guitar") != std::string::npos ||
+                                 trackName.find("guitar") != std::string::npos ||
+                                 matchedRule.ntt == 4);
+                                 
+                bool isBass = (trackName.find("Bass") != std::string::npos || 
+                               trackName.find("bass") != std::string::npos ||
+                               matchedRule.ntt == 3);
+ 
                 // Task 1: VST Velocity Clamping (Guitar & Bass tracks)
                 // Cap velocity at 100 for normal notes (velocity < 115). High-velocity triggers are processed in MegaVoiceTranslator.
-                if (isGuitarOrBass && velocity < 115 && velocity > 100) {
+                if ((isGuitar || isBass) && velocity < 115 && velocity > 100) {
                     velocity = 100;
                 }
-
+ 
                 if (m_lastValidChord.rootNote != -1) {
                     transposedNote = m_transpositionBrain.calculateTransposition(originalNote, m_lastValidChord, matchedRule);
                 }
                 
+                // Fold notes to stay inside VST physical playable range
+                if (isGuitar) {
+                    while (transposedNote < 40) {
+                        transposedNote += 12;
+                    }
+                    while (transposedNote > 84) {
+                        transposedNote -= 12;
+                    }
+                }
+                else if (isBass) {
+                    while (transposedNote < 28) {
+                        transposedNote += 12;
+                    }
+                    while (transposedNote > 67) {
+                        transposedNote -= 12;
+                    }
+                }
+                
                 // Task 2: VST Keyswitch Filtering (Guitar & Bass tracks)
-                // Intercept and discard any MIDI note that falls below E1 (MIDI Note 40)
-                if (isGuitarOrBass && transposedNote < 40) {
+                if (isGuitar && transposedNote < 40) {
+                    m_playingNotes[destChannel][originalNote] = -1;
+                    m_eventIndex++;
+                    continue; // Intercept and discard this Note On
+                }
+                if (isBass && transposedNote < 28) {
                     m_playingNotes[destChannel][originalNote] = -1;
                     m_eventIndex++;
                     continue; // Intercept and discard this Note On
