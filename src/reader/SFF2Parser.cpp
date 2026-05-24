@@ -218,7 +218,7 @@ void SFF2Parser::parseCSEG(const char* data, uint32_t length) {
         if (subId == "Sdec") {
             parseSdec(subData, subLen);
         } else if (subId == "Ctab" || subId == "Ctb2") {
-            parseCtab(subData, subLen);
+            parseCtab(subData, subLen, (subId == "Ctb2"));
         } else {
             std::cout << "          Unknown CSEG Sub-chunk: [" << subId << "] Length: " << subLen << std::endl;
         }
@@ -265,7 +265,7 @@ void SFF2Parser::parseSdec(const char* data, uint32_t length) {
               << " | Source Chord Type: " << (int)m_sourceChordType << std::endl;
 }
 
-void SFF2Parser::parseCtab(const char* data, uint32_t length) {
+void SFF2Parser::parseCtab(const char* data, uint32_t length, bool isCtb2) {
     if (length < 18) return; // Parameter block is 18 bytes
 
     CasmRule rule;
@@ -295,16 +295,28 @@ void SFF2Parser::parseCtab(const char* data, uint32_t length) {
     rule.sourceRoot = m_sourceRoot;
     rule.sourceChordType = m_sourceChordType;
 
-    // Correctly map parameter bytes according to exact reverse-engineered offsets
-    if (length >= 25) {
-        rule.highKey = static_cast<uint8_t>(data[17]);
-        rule.sourceRoot = static_cast<uint8_t>(data[18]);
-        rule.sourceChordType = static_cast<uint8_t>(data[19]);
-        rule.ntr = static_cast<uint8_t>(data[20]);
-        rule.ntt = static_cast<uint8_t>(data[21]);
-        rule.retriggerRule = static_cast<uint8_t>(data[22]);
-        rule.noteLimitLow = static_cast<uint8_t>(data[23]);
-        rule.noteLimitHigh = static_cast<uint8_t>(data[24]);
+    if (isCtb2) {
+        // Parse SFF2 (Ctb2) format - Data sits in the Low Notes sub-structure starting at Byte 22
+        if (length >= 28) {
+            rule.ntr = static_cast<uint8_t>(data[22]);
+            rule.ntt = static_cast<uint8_t>(data[23]);
+            rule.highKey = static_cast<uint8_t>(data[24]);
+            rule.noteLimitLow = static_cast<uint8_t>(data[25]);
+            rule.noteLimitHigh = static_cast<uint8_t>(data[26]);
+            rule.retriggerRule = static_cast<uint8_t>(data[27]);
+        }
+    } else {
+        // Parse SFF1 (Ctab) format - Apply correct byte offsets from specification
+        if (length >= 26) {
+            rule.sourceRoot = static_cast<uint8_t>(data[18]);
+            rule.sourceChordType = static_cast<uint8_t>(data[19]);
+            rule.ntr = static_cast<uint8_t>(data[20]);
+            rule.ntt = static_cast<uint8_t>(data[21]);
+            rule.highKey = static_cast<uint8_t>(data[22]);
+            rule.noteLimitLow = static_cast<uint8_t>(data[23]);
+            rule.noteLimitHigh = static_cast<uint8_t>(data[24]);
+            rule.retriggerRule = static_cast<uint8_t>(data[25]);
+        }
     }
 
     // Store the rest of the raw bytes
