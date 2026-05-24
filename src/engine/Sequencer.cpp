@@ -8,7 +8,7 @@ namespace engine {
 Sequencer::Sequencer(SFF2Parser& parser, MidiOutput& midiOut, ChordRecognizer& chordRecognizer)
     : m_parser(parser), m_midiOut(midiOut), m_chordRecognizer(chordRecognizer),
       m_sectionStartTick(0), m_sectionEndTick(0), m_relativeTick(0), m_eventIndex(0),
-      m_styleData(&parser), m_bassOutputChannel(10) {
+      m_styleData(&parser), m_bassOutputChannel(0) {
     m_lastValidChord.rootNote = -1;
     m_activeChord.rootNote = -1;
 
