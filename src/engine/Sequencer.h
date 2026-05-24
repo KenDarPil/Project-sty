@@ -104,6 +104,7 @@ private:
     Chord m_activeChord;
     std::unordered_map<uint32_t, int> m_activeNoteMap;
     std::unordered_map<uint32_t, int> m_activeVelocityMap;
+    std::unordered_map<uint8_t, int> m_activeKeyswitchMap; // Map output channel to currently active keyswitch
     SFF2Parser* m_styleData;
 
     void killAllActiveNotes();

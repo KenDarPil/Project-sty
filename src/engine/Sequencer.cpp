@@ -63,6 +63,7 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             int      newTransposed;
             int      velocity;
             bool     shouldErase; // true = just kill, false = retrigger
+            int      keyswitchNote;
         };
         std::vector<RetrigEntry> entries;
 
@@ -98,6 +99,7 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             entry.oldTransposed = oldTransposed;
             entry.velocity     = velocity;
             entry.shouldErase  = false;
+            entry.keyswitchNote = -1;
 
             if (rtr == 0) {
                 // RTR=0: Stop — just kill the note
@@ -132,7 +134,9 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
 
                     if (!matchedRule.trackName.empty()) {
                         std::string articulation;
-                        m_megaVoiceTranslator.translate(matchedRule.trackName, entry.newTransposed, velocity, articulation);
+                        int keyswitchNote = -1;
+                        m_megaVoiceTranslator.translate(matchedRule.trackName, entry.newTransposed, velocity, keyswitchNote, articulation);
+                        entry.keyswitchNote = keyswitchNote;
                     }
                 }
             }
@@ -152,6 +156,16 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             if (e.shouldErase) {
                 keysToErase.push_back(e.trackingKey);
             } else {
+                // If the translator demanded a keyswitch, trigger it just before the note
+                if (e.keyswitchNote != -1) {
+                    int activeKs = m_activeKeyswitchMap[e.destChannel];
+                    if (activeKs != e.keyswitchNote) {
+                        if (activeKs != 0) m_midiOut.sendNoteOff(e.destChannel, activeKs);
+                        m_midiOut.sendNoteOn(e.destChannel, e.keyswitchNote, 100);
+                        m_activeKeyswitchMap[e.destChannel] = e.keyswitchNote;
+                    }
+                }
+
                 m_midiOut.sendNoteOn(e.destChannel, e.newTransposed, e.velocity);
                 keysToUpdate.push_back({e.trackingKey, e.newTransposed});
             }
@@ -526,9 +540,10 @@ void Sequencer::tick(uint32_t currentTick) {
                 while (transformedNote > 67) transformedNote -= 12;
             }
 
+            int keyswitchNote = -1;
             if (!channelRule.trackName.empty()) {
                 std::string articulation;
-                m_megaVoiceTranslator.translate(channelRule.trackName, transformedNote, velocity, articulation);
+                m_megaVoiceTranslator.translate(channelRule.trackName, transformedNote, velocity, keyswitchNote, articulation);
             }
             
             {
@@ -542,6 +557,15 @@ void Sequencer::tick(uint32_t currentTick) {
             uint8_t outCh = mapChannel(channelRule.destChannel);
             if (isBassRule(channelRule)) outCh = m_bassOutputChannel;
             else if (isGuitarRule(channelRule)) outCh = m_guitarOutputChannel;
+
+            if (keyswitchNote != -1) {
+                int activeKs = m_activeKeyswitchMap[outCh];
+                if (activeKs != keyswitchNote) {
+                    if (activeKs != 0) m_midiOut.sendNoteOff(outCh, activeKs);
+                    m_midiOut.sendNoteOn(outCh, keyswitchNote, 100);
+                    m_activeKeyswitchMap[outCh] = keyswitchNote;
+                }
+            }
 
             std::cout << "[Tick] NoteOn: Track='" << channelRule.trackName
                       << "' srcCh=" << (int)channel+1
