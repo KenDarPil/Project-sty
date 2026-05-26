@@ -28,13 +28,21 @@ public:
     // Returns true if an articulation was triggered.
     bool translate(const std::string& trackName, int& note, int& velocity, std::string& outArticulation);
 
-    // Translates Yamaha proprietary Bank Select (CC0/CC32) and Program Change (PC) to standard GM patches.
-    // Returns true if a translation occurred.
+    // Processes Yamaha proprietary Bank Select (CC0/CC32) and Program Change (PC).
+    // Uses an XG Dictionary to validate and pass through correct XG patches, avoiding GM fallback.
+    // Returns true if the patch was recognized and processed.
     bool translatePatch(const std::string& trackName, uint8_t& bankMSB, uint8_t& bankLSB, uint8_t& program);
 
 private:
     // Maps a track name (e.g., "guitar27") to its list of articulation rules
     std::map<std::string, std::vector<ArticulationRule>> m_rules;
+
+    // XG Patch Dictionary
+    // Key: (bankMSB << 16) | (bankLSB << 8) | program
+    // Value: Instrument Name
+    std::map<uint32_t, std::string> m_xgDictionary;
+
+    void initializeXGDictionary();
 };
 
 } // namespace engine
