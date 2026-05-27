@@ -87,15 +87,25 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
     // Protect MegaVoice Keyswitches (Articulations) from being pitch-shifted
     // We pass them through untouched here so that MegaVoiceTranslator can handle them
     // instead of pitching them up and ruining the articulation mapping.
-    bool isBassTrack = (rule.destChannel == 10 || rule.ntt == 3);
+    std::string lowerTrackName = rule.trackName;
+    std::transform(lowerTrackName.begin(), lowerTrackName.end(), lowerTrackName.begin(), ::tolower);
+    bool isBassTrack = (lowerTrackName.find("bass") != std::string::npos ||
+                        lowerTrackName.find("bs")   != std::string::npos ||
+                        rule.ntt == 3 ||
+                        rule.destChannel == 10);
+    bool isGuitarTrack = (lowerTrackName.find("guitar") != std::string::npos ||
+                          lowerTrackName.find("gtr")    != std::string::npos ||
+                          lowerTrackName.find("gt")     != std::string::npos ||
+                          rule.ntt == 4);
+
     if (isBassTrack && sourceNote < 28) {
         return sourceNote;
     }
-    if (rule.ntt == 4 && sourceNote < 40) { // Guitar Track
+    if (isGuitarTrack && sourceNote < 40) { // Guitar Track
         return sourceNote;
     }
     // Also protect extremely high MegaVoice noises
-    if ((isBassTrack || rule.ntt == 4) && sourceNote > 90) {
+    if ((isBassTrack || isGuitarTrack) && sourceNote > 90) {
         return sourceNote;
     }
 
@@ -112,8 +122,8 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
     // 3. Process NTT (Note Transposition Table Rules)
     if (rule.playChord != 0 && rule.ntt != 0) { // 0 = Bypass Table
         
-        // Handle standard scalar corrections (Melody=1, Chord=2, Bass=3, Guitar=4)
-        if (rule.ntt == 1 || rule.ntt == 2 || rule.ntt == 3 || rule.ntt == 4) {
+        // Handle standard scalar corrections (Melody=1, Chord=2, Bass=3, Guitar=4, Harmonic Minor=5)
+        if (rule.ntt == 1 || rule.ntt == 2 || rule.ntt == 3 || rule.ntt == 4 || rule.ntt == 5) {
             
             // Map Thirds and Sixths (Major <-> Minor Conversions)
             if (isSourceMinor && !isLiveMinor) {
@@ -177,9 +187,7 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
     // Note: rule.ntr == 0 (Root Transposition) shifts parallelly, which our pitchOffset calculation already handles.
 
     // 6. Bass Specific Modifications (Fingered on Bass / Slash Chords)
-    // Match either by NTT type 3 OR by explicit dest channel 10 (MIDI Ch 11 = user bass channel)
-    bool isBassChannel = (rule.destChannel == 10 || rule.ntt == 3);
-    if (isBassChannel) {
+    if (isBassTrack) {
         if (liveChord.bassNote != -1 && liveChord.bassNote != liveChord.rootNote) {
             // FINGERED ON BASS (Slash Chords):
             // Only shift notes that were originally the ROOT of the pattern.
@@ -195,13 +203,13 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
             }
         }
         
-        // Force output note safety bounds directly into standard Bass register (E1-G3)
-        while (transposedNote > 55) transposedNote -= 12;
+        // Force output note safety bounds directly into standard Bass register (E1-E4, 28-64 range)
+        while (transposedNote > 64) transposedNote -= 12;
         while (transposedNote < 28) transposedNote += 12;
     }
 
-    // 7. Guitar Mode Exception / Fret Alterations (NTT = 4 is Guitar SFF2)
-    if (rule.ntt == 4) {
+    // 7. Guitar Mode Exception / Fret Alterations (Guitar Track)
+    if (isGuitarTrack) {
         int intervalFromRoot = (transposedNote - liveChord.rootNote + 24) % 12;
         // Shift lower muddy intervals up an octave to replicate native open-string chord fingerboard geography
         if ((intervalFromRoot == 3 || intervalFromRoot == 4 || intervalFromRoot == 10) && transposedNote < 57) {

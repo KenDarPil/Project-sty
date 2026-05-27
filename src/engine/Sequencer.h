@@ -41,6 +41,12 @@ public:
     void setBassOutputChannel(uint8_t ch) { m_bassOutputChannel = ch; }
     uint8_t getBassOutputChannel() const  { return m_bassOutputChannel; }
 
+    void setBassOctaveOffset(int offset) { m_bassOctaveOffset = offset; }
+    int getBassOctaveOffset() const { return m_bassOctaveOffset; }
+
+    void setGuitarOctaveOffset(int offset) { m_guitarOctaveOffset = offset; }
+    int getGuitarOctaveOffset() const { return m_guitarOctaveOffset; }
+
     void setSectionLoopCallback(std::function<void()> callback) {
         m_sectionLoopCallback = callback;
     }
@@ -50,13 +56,19 @@ public:
     void setGuitarOutputChannel(uint8_t ch) { m_guitarOutputChannel = ch; }
     uint8_t getGuitarOutputChannel() const  { return m_guitarOutputChannel; }
 
+    // Drum Output Channel: ALL tracks identified as drums/percussion
+    // are force-routed to this channel. Default = 1 (MIDI Ch 2).
+    void setDrumOutputChannel(uint8_t ch) { m_drumOutputChannel = ch; }
+    uint8_t getDrumOutputChannel() const  { return m_drumOutputChannel; }
+
     // Helper: returns true if a CASM rule identifies a bass track
     static bool isBassRule(const CasmRule& rule) {
         std::string lower = rule.trackName;
         std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
         return (lower.find("bass") != std::string::npos ||
                 lower.find("bs")   != std::string::npos ||
-                rule.ntt == 3);
+                rule.ntt == 3 ||
+                rule.destChannel == 10);
     }
 
     // Helper: returns true if a CASM rule identifies a guitar track
@@ -103,6 +115,12 @@ private:
 
     // Dedicated guitar output channel (0-based). All guitar tracks are routed here.
     uint8_t m_guitarOutputChannel;
+
+    // Dedicated drum output channel (0-based). All drum tracks are routed here.
+    uint8_t m_drumOutputChannel;
+
+    int m_bassOctaveOffset;
+    int m_guitarOctaveOffset;
 
     // Thread Safety & State Cache
     std::mutex m_chordMutex;

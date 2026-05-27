@@ -88,11 +88,15 @@ int main(int argc, char* argv[]) {
     //
     // RECOMMENDED CARLA VST SETUP:
     // - Addictive Drums (or FluidSynth Drum Kit) -> MIDI Channel 2
-    // - Ample Bass (or GM Bass) -> MIDI Channel 3
+    // - Ample Bass (or GM Bass) -> MIDI Channel 1
     // - Ample Guitar -> MIDI Channel 4
 
-    sequencer.setBassOutputChannel(2);   // MIDI Ch 3
+    sequencer.setBassOutputChannel(0);   // MIDI Ch 1
     sequencer.setGuitarOutputChannel(3); // MIDI Ch 4
+    
+    // Octave Transposition Offsets (adapt to standard VST pitch registers)
+    sequencer.setBassOctaveOffset(0);    // Default Standard. Change to -12 if too high, or +12 if silent/too low.
+    sequencer.setGuitarOctaveOffset(0);  // Default Standard. Change to -12 or +12 if needed.
 
     
     engine::StyleController styleController;

@@ -41,10 +41,10 @@ Chord ChordRecognizer::detectChord() {
         return chord; // Return No Chord (-1) to latch/maintain the last chord in memory!
     }
 
-    // STRICT FINGERED MODE: Require at least 3 notes. 
-    // (Prevents muddy sound from accidental single/double key presses)
-    if (m_heldNotes.size() < 2) { 
-        return chord; // Now allows 2-note chords to evaluate
+    // STRICT FINGERED MODE: Require at least 1 note. 
+    // (Allows standard single-finger chord triggers)
+    if (m_heldNotes.size() < 1) { 
+        return chord; 
     }
 
     // Convert MIDI notes (0-127) to pitch classes (0-11)
@@ -126,7 +126,7 @@ Chord ChordRecognizer::detectChord() {
     if (chord.rootNote == -1) {
         // Fallback if absolutely no shape matches
         chord.rootNote = chord.bassNote;
-        chord.type = "???";
+        chord.type = "";
     }
 
     return chord;

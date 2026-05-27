@@ -57,7 +57,7 @@ bool MegaVoiceTranslator::translate(const std::string& trackName, int& note, int
         }
 
         // 2. Handle extreme noise triggers (outside playable guitar range)
-        if (note < 40 || note > 84) {
+        if (note < 40 || note > 72) {
             int r = std::rand() % 3;
             note = (r == 0) ? 77 : (r == 1 ? 79 : 90); // Scratch, Muting Noise, Hit Top
             velocity = 40;
@@ -101,7 +101,7 @@ bool MegaVoiceTranslator::translate(const std::string& trackName, int& note, int
                 outArticulation = "MegaVoice Bass Slide Noise (High-Vel)";
                 velocity = 90;
             } else {
-                outKeyswitch = 28; // E0 keyswitch for Slap Bass
+                outKeyswitch = 16; // E0 keyswitch for Slap Bass (MIDI note 16)
                 outArticulation = "MegaVoice Bass Slap (High-Vel)";
                 velocity = 100;
             }
@@ -109,7 +109,7 @@ bool MegaVoiceTranslator::translate(const std::string& trackName, int& note, int
         }
 
         // 2. Handle extreme noise triggers (outside playable bass range)
-        if (note < 28 || note > 60) {
+        if (note < 28 || note > 64) {
             note = 28; // Pop/Slap Keyswitch directly as a noise
             velocity = 100;
             outArticulation = "Ample Slap Noise (Out-of-range)";
@@ -118,21 +118,21 @@ bool MegaVoiceTranslator::translate(const std::string& trackName, int& note, int
 
         // 3. Normal playable note velocities
         if (velocity <= 60) {
-            outKeyswitch = 24; // C0 (Sustain)
+            outKeyswitch = 12; // C0 (Sustain) (MIDI note 12)
             outArticulation = "Ample Sustain";
             return true;
         } else if (velocity <= 90) {
-            outKeyswitch = 26; // D0 (Palm Mute)
+            outKeyswitch = 14; // D0 (Palm Mute) (MIDI note 14)
             velocity = 95;
             outArticulation = "Ample Palm Mute";
             return true;
         } else if (velocity <= 110) {
-            outKeyswitch = 27; // D#0 (Slide)
+            outKeyswitch = 15; // D#0 (Slide) (MIDI note 15)
             velocity = 105;
             outArticulation = "Ample Slide";
             return true;
         } else {
-            outKeyswitch = 28; // E0 (Slap)
+            outKeyswitch = 16; // E0 (Slap) (MIDI note 16)
             velocity = 115;
             outArticulation = "Ample Slap";
             return true;

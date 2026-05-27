@@ -9,7 +9,7 @@ namespace engine {
 Sequencer::Sequencer(SFF2Parser& parser, MidiOutput& midiOut, ChordRecognizer& chordRecognizer)
     : m_parser(parser), m_midiOut(midiOut), m_chordRecognizer(chordRecognizer),
       m_sectionStartTick(0), m_sectionEndTick(0), m_relativeTick(0), m_eventIndex(0),
-      m_styleData(&parser), m_bassOutputChannel(2) { // Default to MIDI ch 3
+      m_styleData(&parser), m_bassOutputChannel(0) { // Default to MIDI ch 1
     m_lastValidChord.rootNote = -1;
     m_activeChord.rootNote = -1;
 
@@ -23,6 +23,9 @@ Sequencer::Sequencer(SFF2Parser& parser, MidiOutput& midiOut, ChordRecognizer& c
         }
     }
     m_guitarOutputChannel = 3; // Default to MIDI ch 4
+    m_drumOutputChannel   = 1; // Default to MIDI ch 2
+    m_bassOctaveOffset    = 0; // Default to no octave shift
+    m_guitarOctaveOffset  = 0; // Default to no octave shift
 }
 
 Sequencer::~Sequencer() {}
@@ -80,23 +83,20 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             uint8_t originalNote = (trackingKey >> 8)  & 0xFF;
 
             CasmRule matchedRule = m_styleData->getCasmRuleForChannel(m_currentSection, channel);
-            // Route bass and guitar strictly
+            // Route bass, guitar, and drums strictly
             uint8_t  destChannel = mapChannel(matchedRule.destChannel);
+            bool isDrum = (matchedRule.destChannel == 8 || matchedRule.destChannel == 9 ||
+                           matchedRule.trackName.find("Rhy") != std::string::npos ||
+                           matchedRule.trackName.find("dr") != std::string::npos);
+
             if (isBassRule(matchedRule)) destChannel = m_bassOutputChannel;
             else if (isGuitarRule(matchedRule)) destChannel = m_guitarOutputChannel;
+            else if (isDrum) destChannel = m_drumOutputChannel;
             int      velocity    = m_activeVelocityMap[trackingKey];
             uint8_t  rtr         = matchedRule.retriggerRule;
 
-            std::string lowerTrackName = matchedRule.trackName;
-            std::transform(lowerTrackName.begin(), lowerTrackName.end(), lowerTrackName.begin(), ::tolower);
-
-            bool isGuitar = (lowerTrackName.find("gtr")    != std::string::npos ||
-                             lowerTrackName.find("guitar") != std::string::npos ||
-                             matchedRule.ntt == 4);
-            bool isBass   = (lowerTrackName.find("bass") != std::string::npos ||
-                             lowerTrackName.find("bs")   != std::string::npos ||
-                             matchedRule.ntt == 3 ||
-                             matchedRule.destChannel == 10); // MIDI Ch 11 = index 10 = bass
+            bool isGuitar = isGuitarRule(matchedRule);
+            bool isBass   = isBassRule(matchedRule);
 
             RetrigEntry entry;
             entry.trackingKey  = trackingKey;
@@ -121,16 +121,20 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
 
                     if (isGuitar) {
                         while (newTransposed < 40) newTransposed += 12;
-                        while (newTransposed > 84) newTransposed -= 12;
+                        while (newTransposed > 72) newTransposed -= 12;
                     } else if (isBass) {
                         while (newTransposed < 28) newTransposed += 12;
-                        while (newTransposed > 67) newTransposed -= 12;
+                        while (newTransposed > 64) newTransposed -= 12;
                     }
 
                     if ((isGuitar && newTransposed < 40) || (isBass && newTransposed < 28)) {
                         entry.shouldErase   = true;
                         entry.newTransposed = oldTransposed;
                     } else {
+                        // Apply octave offsets after folding/validation is complete
+                        if (isGuitar) newTransposed += m_guitarOctaveOffset;
+                        if (isBass)   newTransposed += m_bassOctaveOffset;
+
                         // Global velocity soft-limit: keep within 80-100 to prevent clipping
                         if (velocity > 100) velocity = 100;
                         if (velocity < 1)   velocity = 1;
@@ -202,10 +206,15 @@ void Sequencer::killAllActiveNotesLocked() {
         int      transformedNote = pair.second;
         uint8_t  srcChannel    = (trackingKey >> 16) & 0x0F;
         CasmRule rule = m_styleData->getCasmRuleForChannel(m_currentSection, srcChannel);
-        // Bass tracks were sent to m_bassOutputChannel, Guitar to m_guitarOutputChannel, so NoteOff must go there too
+        // Bass tracks were sent to m_bassOutputChannel, Guitar to m_guitarOutputChannel, Drums to m_drumOutputChannel, so NoteOff must go there too
         uint8_t outCh = mapChannel(rule.destChannel);
+        bool isDrum = (rule.destChannel == 8 || rule.destChannel == 9 ||
+                       rule.trackName.find("Rhy") != std::string::npos ||
+                       rule.trackName.find("dr") != std::string::npos);
+
         if (isBassRule(rule)) outCh = m_bassOutputChannel;
         else if (isGuitarRule(rule)) outCh = m_guitarOutputChannel;
+        else if (isDrum) outCh = m_drumOutputChannel;
         m_midiOut.sendNoteOff(outCh, transformedNote);
     }
     m_activeNoteMap.clear();
@@ -320,9 +329,8 @@ void Sequencer::setSection(const std::string& sectionName) {
             
             if (type == 0xC0 || type == 0xB0) {
                 // Case-insensitive CASM rule lookup (mirrors getCasmRuleForChannel)
-                uint8_t casmDest  = channel;
+                CasmRule matchedRule;
                 bool ruleMatched  = false;
-                std::string trackName = "";
                 
                 for (const auto& rule : rules) {
                     if (rule.sourceChannel != channel) continue;
@@ -331,50 +339,54 @@ void Sequencer::setSection(const std::string& sectionName) {
                     std::string rulesLower = rule.appliedSections;
                     std::transform(rulesLower.begin(), rulesLower.end(), rulesLower.begin(), ::tolower);
                     if (rulesLower.find(sectionLower) != std::string::npos) {
-                        casmDest  = rule.destChannel;
-                        trackName = rule.trackName;
+                        matchedRule = rule;
                         ruleMatched = true;
                         break;
                     }
                 }
                 
                 if (ruleMatched) {
-                    // Build a temporary CasmRule for isBassRule detection
-                    CasmRule tempRule;
-                    tempRule.trackName = trackName;
-                    // Find ntt from the full rules vector
-                    for (const auto& r : rules) {
-                        if (r.sourceChannel == channel && r.trackName == trackName) {
-                            tempRule.ntt = r.ntt;
-                            break;
-                        }
-                    }
-                    // Bass tracks always go to m_bassOutputChannel; Guitar to m_guitarOutputChannel; others use channel map
-                    uint8_t outCh = mapChannel(casmDest);
-                    if (isBassRule(tempRule)) outCh = m_bassOutputChannel;
-                    else if (isGuitarRule(tempRule)) outCh = m_guitarOutputChannel;
+                    // Bass tracks always go to m_bassOutputChannel; Guitar to m_guitarOutputChannel; Drums to m_drumOutputChannel; others use channel map
+                    uint8_t outCh = mapChannel(matchedRule.destChannel);
+                    bool isDrum = (matchedRule.destChannel == 8 || matchedRule.destChannel == 9 ||
+                                   matchedRule.trackName.find("Rhy") != std::string::npos ||
+                                   matchedRule.trackName.find("dr") != std::string::npos);
+
+                    if (isBassRule(matchedRule)) outCh = m_bassOutputChannel;
+                    else if (isGuitarRule(matchedRule)) outCh = m_guitarOutputChannel;
+                    else if (isDrum) outCh = m_drumOutputChannel;
 
                     if (type == 0xC0) {
                         uint8_t program = ev.data1;
                         uint8_t bankMSB = channelMSB[channel];
                         uint8_t bankLSB = channelLSB[channel];
                         
-                        m_megaVoiceTranslator.translatePatch(trackName, bankMSB, bankLSB, program);
+                        m_megaVoiceTranslator.translatePatch(matchedRule.trackName, bankMSB, bankLSB, program);
                         
-                        m_midiOut.sendControlChange(outCh, 0, bankMSB);
-                        m_midiOut.sendControlChange(outCh, 32, bankLSB);
+                        // FIX: Skip sending Bank Select (CC0/CC32) and Program Change (PC) to dedicated VST channels
+                        // (Bass, Guitar, Drums) because these plugins (like Ample Sound Lite and Addictive Drums)
+                        // do not support XG program banks and will mute or reset their engines when receiving them!
+                        bool isDedicatedVST = (outCh == m_bassOutputChannel || 
+                                               outCh == m_guitarOutputChannel || 
+                                               outCh == m_drumOutputChannel);
+                        if (!isDedicatedVST) {
+                            m_midiOut.sendControlChange(outCh, 0, bankMSB);
+                            m_midiOut.sendControlChange(outCh, 32, bankLSB);
+                            m_midiOut.sendProgramChange(outCh, program);
+                        }
+                        
                         m_cachedMSB[outCh] = bankMSB;
                         m_cachedLSB[outCh] = bankLSB;
-                        m_midiOut.sendProgramChange(outCh, program);
                         
-                        // Print routing row (highlights bass/guitar in bold via marker)
+                        // Print routing row (highlights bass/guitar/drums via marker)
                         std::string tag = "";
-                        if (isBassRule(tempRule)) tag = " <<< BASS";
-                        else if (isGuitarRule(tempRule)) tag = " <<< GUITAR";
-                        std::cout << "  " << trackName;
-                        for (int p = trackName.size(); p < 16; ++p) std::cout << ' ';
+                        if (isBassRule(matchedRule)) tag = " <<< BASS";
+                        else if (isGuitarRule(matchedRule)) tag = " <<< GUITAR";
+                        else if (isDrum) tag = " <<< DRUMS";
+                        std::cout << "  " << matchedRule.trackName;
+                        for (int p = matchedRule.trackName.size(); p < 16; ++p) std::cout << ' ';
                         std::cout << "| src ch" << (int)channel+1
-                                  << "  | casm ch" << (int)casmDest+1
+                                  << "  | casm ch" << (int)matchedRule.destChannel+1
                                   << "  | >>> MIDI Ch " << (int)outCh+1
                                   << "  (Bank " << (int)bankMSB << ":" << (int)bankLSB
                                   << ", PC " << (int)program << ", Voice: " << getXGVoiceName(bankMSB, bankLSB, program) << ")" << tag << std::endl;
@@ -508,17 +520,8 @@ void Sequencer::tick(uint32_t currentTick) {
                 continue;
             }
 
-            std::string lowerTrackName = channelRule.trackName;
-            std::transform(lowerTrackName.begin(), lowerTrackName.end(), lowerTrackName.begin(), ::tolower);
-
-            bool isGuitar = (lowerTrackName.find("gtr") != std::string::npos || 
-                             lowerTrackName.find("guitar") != std::string::npos ||
-                             channelRule.ntt == 4);
-                             
-            bool isBass = (lowerTrackName.find("bass") != std::string::npos || 
-                           lowerTrackName.find("bs")   != std::string::npos ||
-                           channelRule.ntt == 3 ||
-                           channelRule.destChannel == 10); // MIDI Ch 11 = index 10 = bass
+            bool isGuitar = isGuitarRule(channelRule);
+            bool isBass   = isBassRule(channelRule);
 
             // Global velocity soft-limit: prevent clipping from many simultaneous voices
             // High-velocity articulation triggers (>= 115) are exempt from limiting
@@ -546,11 +549,13 @@ void Sequencer::tick(uint32_t currentTick) {
             // Fold notes to stay inside VST physical playable range
             if (isGuitar) {
                 while (transformedNote < 40) transformedNote += 12;
-                while (transformedNote > 84) transformedNote -= 12;
+                while (transformedNote > 72) transformedNote -= 12;
+                transformedNote += m_guitarOctaveOffset;
             }
             else if (isBass) {
                 while (transformedNote < 28) transformedNote += 12;
-                while (transformedNote > 67) transformedNote -= 12;
+                while (transformedNote > 64) transformedNote -= 12;
+                transformedNote += m_bassOctaveOffset;
             }
 
             int keyswitchNote = -1;
@@ -566,10 +571,11 @@ void Sequencer::tick(uint32_t currentTick) {
                 m_activeVelocityMap[trackingKey] = velocity;
             }
 
-            // Route bass and guitar tracks strictly
+            // Route bass, guitar, and drum tracks strictly
             uint8_t outCh = mapChannel(channelRule.destChannel);
             if (isBassRule(channelRule)) outCh = m_bassOutputChannel;
             else if (isGuitarRule(channelRule)) outCh = m_guitarOutputChannel;
+            else if (isDrumTrack) outCh = m_drumOutputChannel;
 
             if (keyswitchNote != -1) {
                 int activeKs = m_activeKeyswitchMap[outCh];
@@ -606,12 +612,20 @@ void Sequencer::tick(uint32_t currentTick) {
             }
             
             uint8_t outCh = mapChannel(channelRule.destChannel);
+            bool isDrumTrack = (channelRule.destChannel == 9 || channelRule.destChannel == 8 || 
+                                channelRule.trackName.find("Rhy") != std::string::npos || 
+                                channelRule.trackName.find("dr") != std::string::npos);
+
             if (isBassRule(channelRule)) outCh = m_bassOutputChannel;
             else if (isGuitarRule(channelRule)) outCh = m_guitarOutputChannel;
+            else if (isDrumTrack) outCh = m_drumOutputChannel;
             if (noteToTurnOff != -1) {
                 m_midiOut.sendNoteOff(outCh, noteToTurnOff);
             } else {
-                m_midiOut.sendNoteOff(outCh, originalNote);
+                int offNote = originalNote;
+                if (isBassRule(channelRule)) offNote += m_bassOctaveOffset;
+                else if (isGuitarRule(channelRule)) offNote += m_guitarOctaveOffset;
+                m_midiOut.sendNoteOff(outCh, offNote);
             }
         }
         

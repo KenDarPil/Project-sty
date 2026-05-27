@@ -347,7 +347,7 @@ CasmRule SFF2Parser::getCasmRuleForChannel(const std::string& section, uint8_t c
     CasmRule defaultRule;
     defaultRule.sourceChannel  = channel;
     defaultRule.destChannel    = channel;
-    defaultRule.playNote       = (m_casmRules.empty()) ? 1 : 0; // Mute if style has CASM rules, play if plain MIDI
+    defaultRule.playNote       = 1;   // Play by default to support all accompaniment tracks
     defaultRule.playChord      = 0;   // No chord adaptation on unknown tracks
     defaultRule.highKey        = 0xFF;
     defaultRule.noteLimitLow   = 0;   // No folding limits — pass everything
