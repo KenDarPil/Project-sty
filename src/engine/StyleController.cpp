@@ -77,8 +77,20 @@ bool StyleController::processMeasureBoundary() {
         m_queuedSection = StyleSection::STOPPED;
         changed = true;
     }
-    // 2. If we just finished a Fill-In, Intro, or Break, automatically drop into the Target Main section
-    else if (m_currentSection == StyleSection::FILL_IN_A || 
+
+    if (changed) {
+        std::cout << "\n>>> [ARRANGER] Now Playing: " << sectionToString(m_currentSection) << " <<<\n" << std::endl;
+    }
+
+    return changed;
+}
+
+bool StyleController::processSectionEnd() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    bool changed = false;
+
+    // If we just finished a Fill-In, Intro, or Break, automatically drop into the Target Main section
+    if (m_currentSection == StyleSection::FILL_IN_A || 
              m_currentSection == StyleSection::FILL_IN_B ||
              m_currentSection == StyleSection::FILL_IN_C ||
              m_currentSection == StyleSection::FILL_IN_D ||
@@ -90,7 +102,7 @@ bool StyleController::processMeasureBoundary() {
         m_currentSection = m_targetAfterFill;
         changed = true;
     }
-    // 3. If we were playing an ending, we stop.
+    // If we were playing an ending, we stop.
     else if (m_currentSection == StyleSection::ENDING_A ||
              m_currentSection == StyleSection::ENDING_B ||
              m_currentSection == StyleSection::ENDING_C) {
@@ -122,10 +134,10 @@ std::string StyleController::sectionToString(StyleSection section) const {
         case StyleSection::MAIN_B: return "Main B";
         case StyleSection::MAIN_C: return "Main C";
         case StyleSection::MAIN_D: return "Main D";
-        case StyleSection::FILL_IN_A: return "Fill In A";
-        case StyleSection::FILL_IN_B: return "Fill In B";
-        case StyleSection::FILL_IN_C: return "Fill In C";
-        case StyleSection::FILL_IN_D: return "Fill In D";
+        case StyleSection::FILL_IN_A: return "Fill In AA";
+        case StyleSection::FILL_IN_B: return "Fill In BB";
+        case StyleSection::FILL_IN_C: return "Fill In CC";
+        case StyleSection::FILL_IN_D: return "Fill In DD";
         case StyleSection::BREAK: return "Break";
         case StyleSection::ENDING_A: return "Ending A";
         case StyleSection::ENDING_B: return "Ending B";

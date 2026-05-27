@@ -87,12 +87,12 @@ int main(int argc, char* argv[]) {
     // VALUES ARE 0-BASED (e.g. 10 = MIDI Channel 11).
     //
     // RECOMMENDED CARLA VST SETUP:
-    // - Addictive Drums (or FluidSynth Drum Kit) -> MIDI Channel 10
-    // - Ample Bass -> MIDI Channel 11
-    // - Ample Guitar -> MIDI Channel 12
+    // - Addictive Drums (or FluidSynth Drum Kit) -> MIDI Channel 2
+    // - Ample Bass (or GM Bass) -> MIDI Channel 3
+    // - Ample Guitar -> MIDI Channel 4
 
-    sequencer.setBassOutputChannel(10);   // MIDI Ch 11
-    sequencer.setGuitarOutputChannel(11); // MIDI Ch 12
+    sequencer.setBassOutputChannel(2);   // MIDI Ch 3
+    sequencer.setGuitarOutputChannel(3); // MIDI Ch 4
 
     
     engine::StyleController styleController;
@@ -121,6 +121,12 @@ int main(int argc, char* argv[]) {
     g_clock = &clock;
     clock.setTempo(120.0);
     
+    sequencer.setSectionLoopCallback([&styleController, &sequencer]() {
+        if (styleController.processSectionEnd()) {
+            sequencer.setSection(styleController.getCurrentSectionName());
+        }
+    });
+
     // The Grand Engine Loop!
     clock.setTickCallback([&sequencer, &styleController](uint64_t currentTick) {
         // Run variation/section transitions on measure boundaries

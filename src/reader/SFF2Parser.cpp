@@ -319,7 +319,10 @@ void SFF2Parser::parseCtab(const char* data, uint32_t length) {
               << " (Ch " << (int)rule.destChannel + 1 << ")"
               << " | Src: " << (int)rule.sourceChannel + 1
               << " | HighKey: 0x" << std::hex << (int)rule.highKey << std::dec
-              << " | NTR: " << (int)rule.ntr << " | NTT: " << (int)rule.ntt << std::endl;
+              << " | NTR: " << (int)rule.ntr << " | NTT: " << (int)rule.ntt 
+              << " | SrcChord: " << (int)rule.sourceChordType
+              << " | PlayNote: " << (int)rule.playNote
+              << " | PlayChord: " << (int)rule.playChord << std::endl;
 }
 
 CasmRule SFF2Parser::getCasmRuleForChannel(const std::string& section, uint8_t channel) const {
@@ -344,7 +347,7 @@ CasmRule SFF2Parser::getCasmRuleForChannel(const std::string& section, uint8_t c
     CasmRule defaultRule;
     defaultRule.sourceChannel  = channel;
     defaultRule.destChannel    = channel;
-    defaultRule.playNote       = 1;
+    defaultRule.playNote       = (m_casmRules.empty()) ? 1 : 0; // Mute if style has CASM rules, play if plain MIDI
     defaultRule.playChord      = 0;   // No chord adaptation on unknown tracks
     defaultRule.highKey        = 0xFF;
     defaultRule.noteLimitLow   = 0;   // No folding limits — pass everything

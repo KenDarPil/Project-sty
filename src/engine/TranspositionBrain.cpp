@@ -181,14 +181,18 @@ int TranspositionBrain::calculateTransposition(int sourceNote, const Chord& live
     bool isBassChannel = (rule.destChannel == 10 || rule.ntt == 3);
     if (isBassChannel) {
         if (liveChord.bassNote != -1 && liveChord.bassNote != liveChord.rootNote) {
-            // Apply strict shift mapping relative to the customized slash inversion note
-            int currentPitchClass = transposedNote % 12;
-            int bassShiftDelta = liveChord.bassNote - currentPitchClass;
-            
-            // Normalize semitone shift vector
-            if (bassShiftDelta > 6)  bassShiftDelta -= 12;
-            if (bassShiftDelta < -6) bassShiftDelta += 12;
-            transposedNote += bassShiftDelta;
+            // FINGERED ON BASS (Slash Chords):
+            // Only shift notes that were originally the ROOT of the pattern.
+            // This allows the bass to pivot on the slash note (e.g. 'E' in C/E)
+            // while keeping all other melodic passing notes (like the 5th) perfectly in the C Major scale!
+            if (sourcePitchClass == rule.sourceRoot) {
+                int bassShiftDelta = liveChord.bassNote - liveChord.rootNote;
+                
+                // Normalize semitone shift vector
+                if (bassShiftDelta > 6)  bassShiftDelta -= 12;
+                if (bassShiftDelta < -6) bassShiftDelta += 12;
+                transposedNote += bassShiftDelta;
+            }
         }
         
         // Force output note safety bounds directly into standard Bass register (E1-G3)

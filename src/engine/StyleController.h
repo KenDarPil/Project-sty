@@ -33,6 +33,9 @@ public:
     // Returns true if the section changed
     bool processMeasureBoundary();
     
+    // Called when the sequencer naturally reaches the end of its section
+    bool processSectionEnd();
+    
     std::string getCurrentSectionName() const;
     
     void setSequencer(Sequencer* sequencer) { m_sequencer = sequencer; }

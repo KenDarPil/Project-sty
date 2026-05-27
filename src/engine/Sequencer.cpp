@@ -9,16 +9,20 @@ namespace engine {
 Sequencer::Sequencer(SFF2Parser& parser, MidiOutput& midiOut, ChordRecognizer& chordRecognizer)
     : m_parser(parser), m_midiOut(midiOut), m_chordRecognizer(chordRecognizer),
       m_sectionStartTick(0), m_sectionEndTick(0), m_relativeTick(0), m_eventIndex(0),
-      m_styleData(&parser), m_bassOutputChannel(10) {
+      m_styleData(&parser), m_bassOutputChannel(2) { // Default to MIDI ch 3
     m_lastValidChord.rootNote = -1;
     m_activeChord.rootNote = -1;
 
     for (int ch = 0; ch < 16; ++ch) {
         m_cachedMSB[ch]  = 0;
         m_cachedLSB[ch]  = 0;
-        m_channelMap[ch] = static_cast<uint8_t>(ch); // Identity: no remapping by default
+        if (ch >= 8) {
+            m_channelMap[ch] = static_cast<uint8_t>(ch - 8); // Map channels 9-16 down to 1-8
+        } else {
+            m_channelMap[ch] = static_cast<uint8_t>(ch);
+        }
     }
-    m_guitarOutputChannel = 11; // Default to MIDI ch 12
+    m_guitarOutputChannel = 3; // Default to MIDI ch 4
 }
 
 Sequencer::~Sequencer() {}
@@ -92,7 +96,7 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             bool isBass   = (lowerTrackName.find("bass") != std::string::npos ||
                              lowerTrackName.find("bs")   != std::string::npos ||
                              matchedRule.ntt == 3 ||
-                             destChannel == 10); // MIDI Ch 11 = index 10 = bass
+                             matchedRule.destChannel == 10); // MIDI Ch 11 = index 10 = bass
 
             RetrigEntry entry;
             entry.trackingKey  = trackingKey;
@@ -107,8 +111,9 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
                 entry.newTransposed = oldTransposed;
                 entry.shouldErase   = true;
             } else {
-                // FIX: Check original note for keyswitches BEFORE recalculating
-                if ((isGuitar && originalNote < 40) || (isBass && originalNote < 28)) {
+                // FIX: Check original note for MegaVoice keyswitches BEFORE recalculating
+                // Yamaha keyswitches are typically below C1 (24). Do not discard valid low notes like C1 (24).
+                if ((isGuitar && originalNote < 24) || (isBass && originalNote < 24)) {
                     entry.shouldErase   = true;
                     entry.newTransposed = oldTransposed;
                 } else {
@@ -144,19 +149,21 @@ void Sequencer::updateLiveChord(const Chord& newChord) {
             entries.push_back(entry);
         }
 
-        // Phase 2: Kill ALL old notes first (prevents polyphony clipping burst)
+        // Phase 2: Kill old notes (only if pitch changed or should be erased)
         for (const auto& e : entries) {
-            m_midiOut.sendNoteOff(e.destChannel, e.oldTransposed);
+            if (e.shouldErase || e.oldTransposed != e.newTransposed) {
+                m_midiOut.sendNoteOff(e.destChannel, e.oldTransposed);
+            }
         }
 
-        // Phase 3: Start new notes (only for non-erased entries)
+        // Phase 3: Start new notes (only for non-erased entries that changed pitch)
         std::vector<uint32_t> keysToErase;
         std::vector<std::pair<uint32_t, int>> keysToUpdate;
 
         for (const auto& e : entries) {
             if (e.shouldErase) {
                 keysToErase.push_back(e.trackingKey);
-            } else {
+            } else if (e.oldTransposed != e.newTransposed) {
                 // If the translator demanded a keyswitch, trigger it just before the note
                 if (e.keyswitchNote != -1) {
                     int activeKs = m_activeKeyswitchMap[e.destChannel];
@@ -394,6 +401,10 @@ void Sequencer::tick(uint32_t currentTick) {
             killAllActiveNotesLocked();
         }
         
+        if (m_sectionLoopCallback) {
+            m_sectionLoopCallback();
+        }
+        
         m_relativeTick = m_sectionStartTick;
         
         const auto& events = m_parser.getMidiEvents();
@@ -515,8 +526,9 @@ void Sequencer::tick(uint32_t currentTick) {
                 velocity = 100;
             }
 
-            // FIX: Intercept and discard keyswitches BEFORE transposing or folding!
-            if ((isGuitar && originalNote < 40) || (isBass && originalNote < 28)) {
+            // FIX: Intercept and discard MegaVoice keyswitches BEFORE transposing or folding!
+            // Yamaha keyswitches are typically below C1 (24). Do not discard valid low notes like C1 (24).
+            if ((isGuitar && originalNote < 24) || (isBass && originalNote < 24)) {
                 m_eventIndex++;
                 continue;
             }

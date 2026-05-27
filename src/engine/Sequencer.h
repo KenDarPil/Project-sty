@@ -5,6 +5,7 @@
 #include <mutex>
 #include <algorithm>
 #include <unordered_map>
+#include <functional>
 #include "../reader/SFF2Parser.h"
 #include "../listener/MidiOutput.h"
 #include "TranspositionBrain.h"
@@ -39,6 +40,10 @@ public:
     // 0-based: MIDI ch 11 = index 10.  Default = 10.
     void setBassOutputChannel(uint8_t ch) { m_bassOutputChannel = ch; }
     uint8_t getBassOutputChannel() const  { return m_bassOutputChannel; }
+
+    void setSectionLoopCallback(std::function<void()> callback) {
+        m_sectionLoopCallback = callback;
+    }
 
     // Guitar Output Channel: ALL tracks identified as guitar (by NTT==4 or track name)
     // are force-routed to this channel. Default = 11.
@@ -106,6 +111,8 @@ private:
     std::unordered_map<uint32_t, int> m_activeVelocityMap;
     std::unordered_map<uint8_t, int> m_activeKeyswitchMap; // Map output channel to currently active keyswitch
     SFF2Parser* m_styleData;
+
+    std::function<void()> m_sectionLoopCallback;
 
     void killAllActiveNotes();
     void killAllActiveNotesLocked(); // Internal: assumes m_chordMutex is already held

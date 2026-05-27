@@ -37,7 +37,7 @@ private:
     ChordRecognizer m_chordRecognizer;
     std::string m_lastChordString;
     std::function<void(const Chord&)> m_chordCallback;
-    int m_splitPoint = 59; // Default to B3 (MIDI Note 59) — everything at or below this is chord zone
+    int m_splitPoint = 42; // Default to F#2 (MIDI Note 42) for 88-key controller — everything at or below this is chord zone
 };
 
 } // namespace engine
