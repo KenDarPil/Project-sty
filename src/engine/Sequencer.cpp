@@ -1,4 +1,5 @@
 #include "Sequencer.h"
+#include "XGVoiceTable.h"
 #include <iostream>
 #include <algorithm>
 #include <cctype>
@@ -369,7 +370,7 @@ void Sequencer::setSection(const std::string& sectionName) {
                                   << "  | casm ch" << (int)casmDest+1
                                   << "  | >>> MIDI Ch " << (int)outCh+1
                                   << "  (Bank " << (int)bankMSB << ":" << (int)bankLSB
-                                  << ", PC " << (int)program << ")" << tag << std::endl;
+                                  << ", PC " << (int)program << ", Voice: " << getXGVoiceName(bankMSB, bankLSB, program) << ")" << tag << std::endl;
                     }
                     else if (type == 0xB0 && ev.data1 != 0 && ev.data1 != 32) {
                         m_midiOut.sendControlChange(outCh, ev.data1, ev.data2);

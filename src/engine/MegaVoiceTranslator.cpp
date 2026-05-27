@@ -1,4 +1,5 @@
 #include "MegaVoiceTranslator.h"
+#include "XGVoiceTable.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -37,35 +38,50 @@ bool MegaVoiceTranslator::translate(const std::string& trackName, int& note, int
 
     // --- GUITAR MEGA VOICE TO AMPLE GUITAR ---
     if (isGuitar) {
-        // Handle Yamaha's extreme noise triggers (outside playable guitar range)
+        // 1. High-Velocity Interception Hook (velocity >= 115) for advanced physical nuances
+        if (velocity >= 115) {
+            if (velocity <= 118) {
+                outKeyswitch = 77; // Note 77 (Scratch)
+                outArticulation = "MegaVoice Guitar Scratch (High-Vel)";
+                velocity = 80;
+            } else if (velocity <= 122) {
+                outKeyswitch = 79; // Note 79 (Muting Noise)
+                outArticulation = "MegaVoice Guitar Mute Noise (High-Vel)";
+                velocity = 80;
+            } else {
+                outKeyswitch = 28; // E0 keyswitch for slide
+                outArticulation = "MegaVoice Guitar Slide (High-Vel)";
+                velocity = 90;
+            }
+            return true;
+        }
+
+        // 2. Handle extreme noise triggers (outside playable guitar range)
         if (note < 40 || note > 84) {
             int r = std::rand() % 3;
             note = (r == 0) ? 77 : (r == 1 ? 79 : 90); // Scratch, Muting Noise, Hit Top
             velocity = 40;
-            outArticulation = "Ample Noise/Scratch";
+            outArticulation = "Ample Noise/Scratch (Out-of-range)";
             return true;
         }
 
-        // It is a normal playable note.
-        // Yamaha uses velocity on normal notes to trigger articulations like Palm Mute or Slides.
+        // 3. Normal playable note velocities
         if (velocity <= 60) {
             outKeyswitch = 24; // C0 (Sustain)
             outArticulation = "Ample Sustain";
             return true;
         } else if (velocity <= 90) {
             outKeyswitch = 26; // D0 (Palm Mute)
-            // Boost velocity back up so the mute is heard clearly
-            velocity = 90;
+            velocity = 90;     // Boost velocity for audibility
             outArticulation = "Ample Palm Mute";
             return true;
         } else if (velocity <= 110) {
-            outKeyswitch = 27; // D#0 (Slide/Scratch depending on context, or hard sustain)
+            outKeyswitch = 27; // D#0 (Hard Strum)
             velocity = 100;
             outArticulation = "Ample Hard Strum";
             return true;
         } else {
-            // Very high velocity (> 110)
-            outKeyswitch = 28; // E0 or similar articulation (Slide)
+            outKeyswitch = 28; // E0 (Slide)
             velocity = 110;
             outArticulation = "Ample Slide/Strum";
             return true;
@@ -74,22 +90,40 @@ bool MegaVoiceTranslator::translate(const std::string& trackName, int& note, int
 
     // --- BASS MEGA VOICE TO AMPLE BASS ---
     if (isBass) {
-        // Handle extreme noise/trigger notes (outside playable bass range)
-        if (note < 28 || note > 60) {
-            note = 28; // Pop/Slap Keyswitch directly (as a noise)
-            velocity = 100;
-            outArticulation = "Ample Slap Noise";
+        // 1. High-Velocity Interception Hook (velocity >= 115) for advanced physical nuances
+        if (velocity >= 115) {
+            if (velocity <= 118) {
+                outKeyswitch = 77; // Note 77 (Pop/Slap Scratch)
+                outArticulation = "MegaVoice Bass Slap Noise (High-Vel)";
+                velocity = 90;
+            } else if (velocity <= 122) {
+                outKeyswitch = 79; // Note 79 (Slide Noise)
+                outArticulation = "MegaVoice Bass Slide Noise (High-Vel)";
+                velocity = 90;
+            } else {
+                outKeyswitch = 28; // E0 keyswitch for Slap Bass
+                outArticulation = "MegaVoice Bass Slap (High-Vel)";
+                velocity = 100;
+            }
             return true;
         }
 
-        // Normal playable note. Map velocities to articulations.
+        // 2. Handle extreme noise triggers (outside playable bass range)
+        if (note < 28 || note > 60) {
+            note = 28; // Pop/Slap Keyswitch directly as a noise
+            velocity = 100;
+            outArticulation = "Ample Slap Noise (Out-of-range)";
+            return true;
+        }
+
+        // 3. Normal playable note velocities
         if (velocity <= 60) {
             outKeyswitch = 24; // C0 (Sustain)
             outArticulation = "Ample Sustain";
             return true;
         } else if (velocity <= 90) {
             outKeyswitch = 26; // D0 (Palm Mute)
-            velocity = 95; // Boost velocity for audibility
+            velocity = 95;
             outArticulation = "Ample Palm Mute";
             return true;
         } else if (velocity <= 110) {
@@ -111,33 +145,36 @@ bool MegaVoiceTranslator::translate(const std::string& trackName, int& note, int
 bool MegaVoiceTranslator::translatePatch(const std::string& trackName, uint8_t& bankMSB, uint8_t& bankLSB, uint8_t& program) {
     std::string lowerTrack = trackName;
     for (auto& c : lowerTrack) c = std::tolower(c);
-    
-    // Preserve banks for drums (which often require MSB 127 or 120)
-    if (lowerTrack.find("dr") != std::string::npos || lowerTrack.find("drum") != std::string::npos) {
+
+    // 1. Preserve banks for drums (which often require MSB 127 or 120 or 126)
+    if (lowerTrack.find("dr") != std::string::npos || lowerTrack.find("drum") != std::string::npos || lowerTrack.find("rhy") != std::string::npos) {
         return true; 
     }
 
-    // Default bank select to 0 for melodic tracks to fallback to General MIDI
-    bankMSB = 0;
-    bankLSB = 0;
-    
-    if (lowerTrack.find("gtr") != std::string::npos || lowerTrack.find("gt") != std::string::npos || lowerTrack.find("guitar") != std::string::npos) {
-        // It's a guitar track! Map program to the GM acoustic steel guitar (PC 25) or keep it in the guitar range (24-31)
-        if (program < 24 || program > 31) {
-            program = 25; // Acoustic Steel Guitar
-        }
-        return true;
-    }
-    
-    if (lowerTrack.find("bass") != std::string::npos || lowerTrack.find("bs") != std::string::npos || lowerTrack.find("ba") != std::string::npos) {
-        // It's a bass track! Map program to GM fingered bass (PC 33) or keep it in the bass range (32-39)
-        if (program < 32 || program > 39) {
-            program = 33; // Electric Fingered Bass
-        }
+    // 2. Preserve rich Bank Select CC0/CC32 and PC values by checking our XG Voice Dictionary
+    if (isXGVoice(bankMSB, bankLSB, program)) {
+        // Voice combination is perfectly valid in standard XG specifications! Route as-is.
         return true;
     }
 
-    return false;
+    // Fallback 1: Revert bankLSB to 0 (General MIDI basic bank) if it exists for this program change
+    if (isXGVoice(bankMSB, 0, program)) {
+        bankLSB = 0;
+        return true;
+    }
+
+    // Fallback 2: Revert entirely to standard GM voice (MSB=0, LSB=0) if it is valid
+    if (isXGVoice(0, 0, program)) {
+        bankMSB = 0;
+        bankLSB = 0;
+        return true;
+    }
+
+    // Ultimate Fallback: Default to Acoustic Grand Piano (0, 0, 0) if voice is completely unrecognized
+    bankMSB = 0;
+    bankLSB = 0;
+    program = 0;
+    return true;
 }
 
 } // namespace engine

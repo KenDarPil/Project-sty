@@ -7,6 +7,7 @@ g++ -std=c++17 ^
     src/engine/ChordRecognizer.cpp ^
     src/engine/TranspositionBrain.cpp ^
     src/engine/MegaVoiceTranslator.cpp ^
+    src/engine/XGVoiceTable.cpp ^
     src/engine/StyleController.cpp ^
     src/engine/RegistrationMemory.cpp ^
     src/engine/Sequencer.cpp ^
